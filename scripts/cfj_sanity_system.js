@@ -188,7 +188,7 @@ function stateFor(current, max) {
   return "stable";
 }
 
-async function refreshSanityState(actor, { previousState = null, forceState = false } = {}) {
+async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false } = {}) {
   const flags = getSanity(actor);
   const current = Number(flags.current ?? actor.system?.resources?.primary?.value ?? actor.system?.abilities?.san?.value ?? 0);
   const max = Number(flags.max ?? actor.system?.resources?.primary?.max ?? actor.system?.abilities?.san?.value ?? 1);
@@ -196,7 +196,7 @@ async function refreshSanityState(actor, { previousState = null, forceState = fa
   const loss = Math.max(0, max - current);
   await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, state, stateText: STATES[state].label });
   await syncStateEffect(actor, state, current, max, loss);
-  if ((state === "fractured" || state === "collapsed") && (forceState || state !== previousState)) await addSymptom(actor, state);
+  if (!suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState)) await addSymptom(actor, state);
 }
 
 async function syncStateEffect(actor, state, current, max, loss) {
@@ -329,7 +329,7 @@ async function restShort(actor) {
   if (!actor) return;
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "symptom" && e.getFlag(MODULE_ID, "severity") === "fractured");
   if (remove.length) await actor.deleteEmbeddedDocuments("ActiveEffect", remove.map((e) => e.id));
-  await refreshSanityState(actor);
+  await refreshSanityState(actor, { suppressSymptoms: true });
 }
 
 async function restLong(actor) {
@@ -341,7 +341,7 @@ async function restLong(actor) {
   await setSanity(actor, Math.min(max, current + 1), max);
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "symptom");
   if (remove.length) await actor.deleteEmbeddedDocuments("ActiveEffect", remove.map((e) => e.id));
-  await refreshSanityState(actor);
+  await refreshSanityState(actor, { suppressSymptoms: true });
 }
 
 function formData(html) {
