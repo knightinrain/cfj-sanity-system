@@ -28,6 +28,8 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 6. Open the world and enable **Cangfanjie Sanity System** in **Manage Modules**.
 7. Refresh the world once after enabling.
 
+The current manifest uses GitHub's branch zip as the download target. If Foundry refuses to install the module even though the manifest opens in a browser, create a GitHub Release zip with `module.json`, `scripts/`, and `styles/` at the zip root, then update the `download` field to that asset URL.
+
 ## What The Module Does
 
 - Connects actor-sheet `SAN` checks and `SAN` saves to the sanity workflow.
@@ -36,8 +38,8 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 - Updates current SAN and the displayed SAN value on the actor.
 - Applies the correct sanity state as an Active Effect.
 - Rolls and applies symptoms when the actor enters 裂解 or 崩溃.
-- Removes 裂解 symptoms on short rest.
-- Restores 1 SAN and removes sanity symptoms on long rest.
+- Removes 裂解 symptoms on short rest without immediately re-adding them.
+- Restores 1 SAN and removes sanity symptoms on long rest without immediately re-adding them.
 
 ## SAN Loss
 
@@ -62,8 +64,8 @@ The module uses lost SAN to determine the current state.
 | 0-1 | 稳定 | No effect. |
 | 2-4 | 动摇 | 下一次同源相关检定或豁免的结果减去 1d4。 |
 | 5-7 | 失衡 | 对同源理智豁免具有劣势；不能从同源现象获得优势。 |
-| 8-10 | 裂解 | Gains 1 裂解 symptom. |
-| 11+ or current SAN 0 | 崩溃 | Gains 1 崩溃 symptom. |
+| 8-10 | 裂解 | Gains 1 裂解 symptom when the actor enters this state. |
+| 11+ or current SAN 0 | 崩溃 | Gains 1 崩溃 symptom when the actor enters this state. |
 
 ## Symptoms
 
@@ -85,6 +87,7 @@ Each symptom has separate 裂解 and 崩溃 text. 崩溃 symptoms are stronger a
 - Short rest removes 裂解 symptoms, then recalculates the current sanity state.
 - Long rest restores 1 current SAN, removes sanity symptoms, then recalculates the current sanity state.
 - Long rest does not raise SAN above the actor's maximum SAN.
+- Rest recalculation does not create a new symptom just because the actor is still in 裂解 or 崩溃.
 
 ## GM Workflow
 
@@ -95,6 +98,22 @@ Each symptom has separate 裂解 and 崩溃 text. 崩溃 symptoms are stronger a
 5. Players click SAN save or SAN check on their sheet.
 
 Players should not set the DC during normal play.
+
+## Known Table Constraint
+
+The module writes current and maximum SAN to the actor's primary resource field so the value is visible on the sheet. If your actor already uses the primary resource for another rule, check that card before installing SAN on that actor.
+
+## Verification Checklist
+
+After enabling the module in a world, verify these points with a test actor and then delete the test actor:
+
+- Generate SAN with `4d6kh3` and confirm the actor's SAN value changes.
+- GM sends a SAN save request with a non-default DC.
+- Player clicks the actor-sheet SAN save and cannot edit the DC.
+- A failed save reduces current SAN and changes the visible state effect.
+- Entering 裂解 or 崩溃 creates a visible symptom effect.
+- Short rest removes 裂解 symptoms.
+- Long rest restores 1 SAN and removes sanity symptoms.
 
 ## Notes
 
