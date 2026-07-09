@@ -30,14 +30,30 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 
 The current manifest uses GitHub's branch zip as the download target. If Foundry refuses to install the module even though the manifest opens in a browser, create a GitHub Release zip with `module.json`, `scripts/`, and `styles/` at the zip root, then update the `download` field to that asset URL.
 
+## Settings
+
+The module appears in **Configure Settings / Game Settings** as **Cangfanjie Sanity System**.
+
+Recommended table defaults:
+
+- `默认 DC`: `15`
+- `玩家必须等待 GM 发起`: enabled
+- `理智显示资源栏`: `主资源栏`, unless the actor already uses it for another rule
+- `短休自动处理理智`: enabled
+- `长休自动处理理智`: enabled
+- `自动生成裂解/崩溃症状`: enabled
+- `显示 GM 明细`: enabled
+
+If the actor already uses the primary resource field, change `理智显示资源栏` to `副资源栏`, `第三资源栏`, or `不写入资源栏` before installing SAN on that actor.
+
 ## What The Module Does
 
 - Connects actor-sheet `SAN` checks and `SAN` saves to the sanity workflow.
 - Lets the GM start a SAN request with DC, source, proficiency, and active deepening.
-- Lets players roll from their actor sheet without seeing or editing the DC.
+- Lets players roll from their actor sheet without seeing or editing the DC when GM request mode is enabled.
 - Updates current SAN and the displayed SAN value on the actor.
 - Applies the correct sanity state as an Active Effect.
-- Rolls and applies symptoms when the actor enters 裂解 or 崩溃.
+- Rolls and applies symptoms when the actor enters 裂解 or 崩溃, if automatic symptoms are enabled.
 - Removes 裂解 symptoms on short rest without immediately re-adding them.
 - Restores 1 SAN and removes sanity symptoms on long rest without immediately re-adding them.
 
@@ -97,16 +113,13 @@ Each symptom has separate 裂解 and 崩溃 text. 崩溃 symptoms are stronger a
 4. Send the request.
 5. Players click SAN save or SAN check on their sheet.
 
-Players should not set the DC during normal play.
-
-## Known Table Constraint
-
-The module writes current and maximum SAN to the actor's primary resource field so the value is visible on the sheet. If your actor already uses the primary resource for another rule, check that card before installing SAN on that actor.
+Players should not set the DC during normal play when `玩家必须等待 GM 发起` is enabled.
 
 ## Verification Checklist
 
 After enabling the module in a world, verify these points with a test actor and then delete the test actor:
 
+- The module appears in Configure Settings.
 - Generate SAN with `4d6kh3` and confirm the actor's SAN value changes.
 - GM sends a SAN save request with a non-default DC.
 - Player clicks the actor-sheet SAN save and cannot edit the DC.
