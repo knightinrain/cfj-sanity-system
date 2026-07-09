@@ -2,6 +2,13 @@ const MODULE_ID = "cfj-sanity-system";
 const FLAG_SCOPE = "world";
 const SAN_FLAG = "sanity";
 
+const RESOURCE_SLOTS = {
+  none: null,
+  primary: "system.resources.primary",
+  secondary: "system.resources.secondary",
+  tertiary: "system.resources.tertiary"
+};
+
 const STATES = {
   stable: { label: "理智：稳定", status: "cfj-sanity-stable", summary: "呼吸、判断正常", rule: "无影响。" },
   shaken: { label: "理智：动摇", status: "cfj-sanity-shaken", summary: "耳鸣、冷汗、手抖、胃部收紧", rule: "下一次同源相关检定或豁免的结果减去 1d4。" },
@@ -43,6 +50,8 @@ const SYMPTOMS = {
   }
 };
 
+Hooks.once("init", registerSettings);
+
 Hooks.once("ready", () => {
   exposeApi();
   registerStatusEffects();
@@ -55,6 +64,25 @@ Hooks.once("ready", () => {
 
 function exposeApi() {
   game.cfjSanity = { installActor, generateSanity, requestDialog, requestForActors, rollSanity: runSanityRoll, refreshActor: refreshSanityState, restShort, restLong };
+}
+
+function registerSettings() {
+  const register = (key, data) => game.settings.register(MODULE_ID, key, { scope: "world", config: true, ...data });
+  register("defaultDc", { name: "默认 DC", hint: "GM 发起理智检定或豁免时的默认 DC。", type: Number, default: 15, range: { min: 1, max: 40, step: 1 } });
+  register("requireGmRequest", { name: "玩家必须等待 GM 发起", hint: "开启后，玩家不能自行设置 DC；必须由 GM 先发起理智检定或豁免。", type: Boolean, default: true });
+  register("resourceSlot", { name: "理智显示资源栏", hint: "选择把当前/最大理智显示在角色卡哪个资源栏。若该资源栏已有用途，请改用其他栏或选择不写入资源栏。", type: String, choices: { primary: "主资源栏", secondary: "副资源栏", tertiary: "第三资源栏", none: "不写入资源栏" }, default: "primary" });
+  register("autoShortRest", { name: "短休自动处理理智", hint: "短休后自动移除裂解症状，并重新计算理智状态。", type: Boolean, default: true });
+  register("autoLongRest", { name: "长休自动处理理智", hint: "长休后自动恢复 1 点当前理智，移除理智症状，并重新计算理智状态。", type: Boolean, default: true });
+  register("autoSymptoms", { name: "自动生成裂解/崩溃症状", hint: "进入裂解或崩溃时自动抽取并添加对应症状。关闭后只显示理智状态。", type: Boolean, default: true });
+  register("showGmDetail", { name: "显示 GM 明细", hint: "开启后，GM 会收到包含 DC、失败差值、同源、熟练和主动深入的私密明细。", type: Boolean, default: true });
+}
+
+function setting(key, fallback) {
+  try {
+    return game.settings.get(MODULE_ID, key);
+  } catch (_err) {
+    return fallback;
+  }
 }
 
 function registerStatusEffects() {
@@ -88,7 +116,7 @@ function patchRestFlow() {
     const originalShort = proto.shortRest;
     proto.shortRest = async function patchedShortRest(...args) {
       const result = await originalShort.apply(this, args);
-      await restShort(this);
+      if (setting("autoShortRest", true)) await restShort(this);
       return result;
     };
   }
@@ -96,8 +124,10 @@ function patchRestFlow() {
     const originalLong = proto.longRest;
     proto.longRest = async function patchedLongRest(...args) {
       const result = await originalLong.apply(this, args);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      await restLong(this);
+      if (setting("autoLongRest", true)) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await restLong(this);
+      }
       return result;
     };
   }
@@ -151,8 +181,9 @@ async function installActor(actor) {
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
   const flags = getSanity(actor);
-  const max = Number(flags.max || actor.system?.resources?.primary?.max || actor.system?.abilities?.san?.value || 10);
-  const current = Number.isFinite(Number(flags.current)) ? Number(flags.current) : max;
+  const visible = getVisibleSanity(actor);
+  const max = Number(flags.max || visible.max || actor.system?.abilities?.san?.value || 10);
+  const current = Number.isFinite(Number(flags.current)) ? Number(flags.current) : Number(visible.current || max);
   await setSanity(actor, current, max);
   await refreshSanityState(actor, { forceState: true });
   ui.notifications.info(`${actor.name} 已连接理智系统。`);
@@ -166,17 +197,31 @@ function resolveActor(actor) {
 
 function getSanity(actor) { return foundry.utils.deepClone(actor.getFlag(FLAG_SCOPE, SAN_FLAG) ?? {}); }
 
+function resourcePath(slot = setting("resourceSlot", "primary")) {
+  return RESOURCE_SLOTS[slot] ?? RESOURCE_SLOTS.primary;
+}
+
+function getVisibleSanity(actor) {
+  const path = resourcePath();
+  if (!path) return { current: null, max: null };
+  const resource = foundry.utils.getProperty(actor, path) ?? {};
+  return { current: resource.value, max: resource.max };
+}
+
 async function setSanity(actor, current, max) {
   current = Math.max(0, Number(current || 0));
   max = Math.max(1, Number(max || current || 1));
   current = Math.min(current, max);
-  await actor.update({
-    "system.abilities.san.value": current,
-    "system.resources.primary.value": current,
-    "system.resources.primary.max": max,
-    "system.resources.primary.label": "理智"
-  });
-  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...getSanity(actor), current, max, resourceSlot: "primary" });
+  const slot = setting("resourceSlot", "primary");
+  const path = resourcePath(slot);
+  const update = { "system.abilities.san.value": current };
+  if (path) {
+    update[`${path}.value`] = current;
+    update[`${path}.max`] = max;
+    update[`${path}.label`] = "理智";
+  }
+  await actor.update(update);
+  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...getSanity(actor), current, max, resourceSlot: slot });
 }
 
 function stateFor(current, max) {
@@ -190,13 +235,15 @@ function stateFor(current, max) {
 
 async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false } = {}) {
   const flags = getSanity(actor);
-  const current = Number(flags.current ?? actor.system?.resources?.primary?.value ?? actor.system?.abilities?.san?.value ?? 0);
-  const max = Number(flags.max ?? actor.system?.resources?.primary?.max ?? actor.system?.abilities?.san?.value ?? 1);
+  const visible = getVisibleSanity(actor);
+  const current = Number(flags.current ?? visible.current ?? actor.system?.abilities?.san?.value ?? 0);
+  const max = Number(flags.max ?? visible.max ?? actor.system?.abilities?.san?.value ?? 1);
   const state = stateFor(current, max);
   const loss = Math.max(0, max - current);
   await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, state, stateText: STATES[state].label });
   await syncStateEffect(actor, state, current, max, loss);
-  if (!suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState)) await addSymptom(actor, state);
+  const shouldAddSymptom = setting("autoSymptoms", true) && !suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState);
+  if (shouldAddSymptom) await addSymptom(actor, state);
 }
 
 async function syncStateEffect(actor, state, current, max, loss) {
@@ -250,12 +297,13 @@ async function runSanityRoll(actor, type = "save") {
   if (!actor) return;
   const flags = getSanity(actor);
   const pending = flags.pending;
-  if (!pending && !game.user?.isGM) return ui.notifications.warn("目前没有 GM 发起的理智判定。玩家不能自行设置 DC。");
-  const data = pending ?? await promptLocalRollOptions(type);
+  if (!pending && !game.user?.isGM && setting("requireGmRequest", true)) return ui.notifications.warn("目前没有 GM 发起的理智判定。玩家不能自行设置 DC。");
+  const data = pending ?? (game.user?.isGM ? await promptLocalRollOptions(type) : defaultRollOptions(type));
   if (!data) return;
-  const dc = Number(data.dc || 15);
-  const current = Number(flags.current ?? actor.system?.abilities?.san?.value ?? actor.system?.resources?.primary?.value ?? 10);
-  const max = Number(flags.max ?? actor.system?.resources?.primary?.max ?? current);
+  const dc = Number(data.dc || setting("defaultDc", 15));
+  const visible = getVisibleSanity(actor);
+  const current = Number(flags.current ?? actor.system?.abilities?.san?.value ?? visible.current ?? 10);
+  const max = Number(flags.max ?? visible.max ?? current);
   const mod = Math.floor((current - 10) / 2);
   const prof = data.proficient ? Number(actor.system?.attributes?.prof ?? 0) : 0;
   const roll = await new Roll(`1d20 + ${mod} + ${prof}`).evaluate({ async: true });
@@ -274,7 +322,7 @@ async function runSanityRoll(actor, type = "save") {
   if (pending) await actor.unsetFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`);
   await refreshSanityState(actor, { previousState });
   await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), flavor: renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source }) });
-  if (game.user?.isGM) await renderGmDetail(actor, data, dc, total);
+  if (game.user?.isGM && setting("showGmDetail", true)) await renderGmDetail(actor, data, dc, total);
 }
 
 function renderRollChat(r) {
@@ -293,25 +341,31 @@ async function renderGmDetail(actor, data, dc, total) {
 
 async function promptLocalRollOptions(type) {
   if (!game.user?.isGM) return null;
+  const defaultDc = Number(setting("defaultDc", 15));
   return new Promise((resolve) => {
     new Dialog({
       title: type === "save" ? "理智豁免" : "理智检定",
-      content: `<form><div class="form-group"><label>DC</label><input name="dc" type="number" value="15"></div><div class="form-group"><label>同源</label><input name="source" type="text" value="未命名来源"></div><div class="form-group"><label>加入熟练</label><input name="proficient" type="checkbox"></div><div class="form-group"><label>主动深入</label><input name="deep" type="checkbox"></div></form>`,
+      content: `<form><div class="form-group"><label>DC</label><input name="dc" type="number" value="${defaultDc}"></div><div class="form-group"><label>同源</label><input name="source" type="text" value="未命名来源"></div><div class="form-group"><label>加入熟练</label><input name="proficient" type="checkbox"></div><div class="form-group"><label>主动深入</label><input name="deep" type="checkbox"></div></form>`,
       buttons: { ok: { label: "掷骰", callback: (html) => resolve(formData(html)) }, cancel: { label: "取消", callback: () => resolve(null) } },
       close: () => resolve(null)
     }).render(true);
   });
 }
 
+function defaultRollOptions(type) {
+  return { type, dc: Number(setting("defaultDc", 15)), source: "未命名来源", proficient: false, deep: false };
+}
+
 function requestDialog() {
   if (!game.user?.isGM) return ui.notifications.warn("只有 GM 可以发起理智判定。");
+  const defaultDc = Number(setting("defaultDc", 15));
   const actors = Array.from(game.users).filter((u) => u.active && u.character).map((u) => ({ user: u, actor: u.character }));
   const selected = canvas?.tokens?.controlled?.filter((t) => t.actor).map((t) => ({ user: null, actor: t.actor })) ?? [];
   const rows = [...selected, ...actors].filter((entry, i, arr) => arr.findIndex((x) => x.actor.id === entry.actor.id) === i);
   const choices = rows.map((entry) => `<label class="cfj-sanity-target"><input type="checkbox" name="actor" value="${entry.actor.id}" checked> ${escapeHtml(entry.actor.name)}${entry.user ? ` (${escapeHtml(entry.user.name)})` : ""}</label>`).join("");
   new Dialog({
     title: "发起理智判定",
-    content: `<form class="cfj-sanity-dialog"><div class="form-group"><label>类型</label><select name="type"><option value="save">理智豁免</option><option value="check">理智检定</option></select></div><div class="form-group"><label>DC</label><input name="dc" type="number" value="15" min="1" max="40"></div><div class="form-group"><label>同源</label><input name="source" type="text" value="未命名来源"></div><div class="form-group"><label>加入熟练</label><input name="proficient" type="checkbox"></div><div class="form-group"><label>主动深入</label><input name="deep" type="checkbox"></div><fieldset><legend>目标角色</legend>${choices || "<p>没有在线玩家角色或已选中的 token。</p>"}</fieldset></form>`,
+    content: `<form class="cfj-sanity-dialog"><div class="form-group"><label>类型</label><select name="type"><option value="save">理智豁免</option><option value="check">理智检定</option></select></div><div class="form-group"><label>DC</label><input name="dc" type="number" value="${defaultDc}" min="1" max="40"></div><div class="form-group"><label>同源</label><input name="source" type="text" value="未命名来源"></div><div class="form-group"><label>加入熟练</label><input name="proficient" type="checkbox"></div><div class="form-group"><label>主动深入</label><input name="deep" type="checkbox"></div><fieldset><legend>目标角色</legend>${choices || "<p>没有在线玩家角色或已选中的 token。</p>"}</fieldset></form>`,
     buttons: { ok: { label: "发送", callback: async (html) => { const data = formData(html); const ids = Array.from(html[0].querySelectorAll("input[name='actor']:checked")).map((el) => el.value); await requestForActors(ids.map((id) => game.actors.get(id)).filter(Boolean), data); } }, cancel: { label: "取消" } }
   }).render(true);
 }
@@ -336,8 +390,9 @@ async function restLong(actor) {
   actor = resolveActor(actor);
   if (!actor) return;
   const flags = getSanity(actor);
-  const max = Number(flags.max ?? actor.system?.resources?.primary?.max ?? 1);
-  const current = Number(flags.current ?? actor.system?.resources?.primary?.value ?? 0);
+  const visible = getVisibleSanity(actor);
+  const max = Number(flags.max ?? visible.max ?? 1);
+  const current = Number(flags.current ?? visible.current ?? 0);
   await setSanity(actor, Math.min(max, current + 1), max);
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "symptom");
   if (remove.length) await actor.deleteEmbeddedDocuments("ActiveEffect", remove.map((e) => e.id));
@@ -346,7 +401,7 @@ async function restLong(actor) {
 
 function formData(html) {
   const form = html[0]?.querySelector?.("form") ?? html.querySelector?.("form");
-  return { type: form?.querySelector("[name='type']")?.value ?? "save", dc: Number(form?.querySelector("[name='dc']")?.value ?? 15), source: form?.querySelector("[name='source']")?.value?.trim?.() || "未命名来源", proficient: Boolean(form?.querySelector("[name='proficient']")?.checked), deep: Boolean(form?.querySelector("[name='deep']")?.checked) };
+  return { type: form?.querySelector("[name='type']")?.value ?? "save", dc: Number(form?.querySelector("[name='dc']")?.value ?? setting("defaultDc", 15)), source: form?.querySelector("[name='source']")?.value?.trim?.() || "未命名来源", proficient: Boolean(form?.querySelector("[name='proficient']")?.checked), deep: Boolean(form?.querySelector("[name='deep']")?.checked) };
 }
 
 function escapeHtml(value) {
