@@ -7,6 +7,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
+  Hooks.on("getSceneControlButtons", removeExternalSanityTool);
   installSanityChatCommand();
   installSanityChatActions();
   console.log(`${MODULE_ID} | chat panel ready`);
