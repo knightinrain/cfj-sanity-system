@@ -12,3 +12,29 @@
   display: block;
   margin: 0.25rem 0;
 }
+
+.cfj-sanity-card {
+  border-left: 3px solid #8f1f35;
+  padding: 0.35rem 0.55rem;
+}
+
+.cfj-sanity-card h3 {
+  margin: 0 0 0.35rem;
+}
+
+.cfj-sanity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.cfj-sanity-actions button {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+.cfj-sanity-note {
+  font-size: 0.9em;
+  opacity: 0.85;
+}
