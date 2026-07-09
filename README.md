@@ -1,133 +1,109 @@
-# Cangfanjie Sanity System
+# 苍梵界理智系统
 
-`Cangfanjie Sanity System` is a Foundry VTT module for the Cangfanjie SAN / 理智 rules used with the dnd5e system.
+`cfj-sanity-system` 是苍梵界 DND5e 跑团使用的 Foundry VTT 理智模块。它处理 SAN 检定、SAN 豁免、理智损失、理智状态、裂解/崩溃症状、短休和长休恢复。
 
-It is built for table use, not just record keeping. The GM sets the SAN request and DC; players click the SAN check or SAN save on their own actor sheet. The module then handles SAN loss, current SAN, state effects, symptoms, short rests, and long rests.
+模块不再要求把多个宏按钮摆在外面。正常使用时，在聊天框输入 `/理智` 打开理智系统控制台；DM 发起判定后，玩家可以直接点聊天卡里的按钮，也可以点角色卡上的 SAN 检定 / SAN 豁免。
 
-## Manifest URL
+## 安装地址
 
-Use this URL in Foundry's module installer:
+在 Foundry 的模块安装器中填写：
 
 ```text
 https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.json
 ```
 
-## Requirements
+## 安装步骤
 
-- Foundry VTT v13. Minimum target: v12.
-- dnd5e system 5.x. Verified target: 5.2.5.
-- Actor sheets must expose the `SAN` ability used by the campaign sheet.
+1. 打开 Foundry VTT 管理后台。
+2. 进入 **Add-on Modules / 附加模块**。
+3. 点击 **Install Module / 安装模块**。
+4. 粘贴上面的 Manifest URL。
+5. 安装模块。
+6. 进入世界，在 **Manage Modules / 管理模块** 中启用 **苍梵界理智系统**。
+7. 刷新一次世界页面。
 
-## Installation
+## 日常使用
 
-1. Open Foundry VTT Setup.
-2. Go to **Add-on Modules**.
-3. Click **Install Module**.
-4. Paste the manifest URL above.
-5. Install the module.
-6. Open the world and enable **Cangfanjie Sanity System** in **Manage Modules**.
-7. Refresh the world once after enabling.
+### DM
 
-The current manifest uses GitHub's branch zip as the download target. If Foundry refuses to install the module even though the manifest opens in a browser, create a GitHub Release zip with `module.json`, `scripts/`, and `styles/` at the zip root, then update the `download` field to that asset URL.
+1. 在聊天框输入 `/理智`。
+2. 聊天区会出现 **理智系统控制台**。
+3. 点击 **发起理智判定**。
+4. 设置类型、DC、同源、是否加入熟练、是否主动深入，并勾选目标角色。
+5. 发送后，每个目标角色都会收到一张聊天卡。
 
-## Settings
+### 玩家
 
-The module appears in **Configure Settings / Game Settings** as **Cangfanjie Sanity System**.
+1. 等 DM 发起理智判定。
+2. 在聊天卡里点击 **进行理智豁免** 或 **进行理智检定**。
+3. 不需要设置 DC，也看不到 DC 设置项。
+4. 也可以点角色卡上的 SAN 检定 / SAN 豁免，效果相同。
 
-Recommended table defaults:
+### 建卡或旧卡同步
 
-- `默认 DC`: `15`
-- `玩家必须等待 GM 发起`: enabled
-- `理智显示资源栏`: `主资源栏`, unless the actor already uses it for another rule
-- `短休自动处理理智`: enabled
-- `长休自动处理理智`: enabled
-- `自动生成裂解/崩溃症状`: enabled
-- `显示 GM 明细`: enabled
+1. 选中角色 token。
+2. 在聊天框输入 `/理智`。
+3. 点击 **初始化或刷新选中角色**。
+4. 选择：
+   - **生成新理智值**：按 `4d6kh3` 生成最大理智和当前理智。
+   - **只连接/刷新**：不重掷，只同步当前理智、最大理智、状态和资源栏。
 
-If the actor already uses the primary resource field, change `理智显示资源栏` to `副资源栏`, `第三资源栏`, or `不写入资源栏` before installing SAN on that actor.
+## 推荐设置
 
-## What The Module Does
+- `默认 DC`：15
+- `玩家必须等待 GM 发起`：开启
+- `理智显示资源栏`：主资源栏；如果角色已有用途，改用副资源栏、第三资源栏或不写入资源栏
+- `短休自动处理理智`：开启
+- `长休自动处理理智`：开启
+- `自动生成裂解/崩溃症状`：开启
+- `显示 GM 明细`：开启
 
-- Connects actor-sheet `SAN` checks and `SAN` saves to the sanity workflow.
-- Lets the GM start a SAN request with DC, source, proficiency, and active deepening.
-- Lets players roll from their actor sheet without seeing or editing the DC when GM request mode is enabled.
-- Updates current SAN and the displayed SAN value on the actor.
-- Applies the correct sanity state as an Active Effect.
-- Rolls and applies symptoms when the actor enters 裂解 or 崩溃, if automatic symptoms are enabled.
-- Removes 裂解 symptoms on short rest without immediately re-adding them.
-- Restores 1 SAN and removes sanity symptoms on long rest without immediately re-adding them.
+## 理智损失
 
-## SAN Loss
+理智豁免失败后才降低当前理智。
 
-SAN loss is applied after a failed SAN save.
-
-| Result | SAN Loss |
+| 结果 | 当前理智变化 |
 | --- | --- |
-| Success | 0 |
-| Failure | 1 |
-| Failure by 5 or more | 2 |
-| Failure by 10 or more, or natural 1 | 3 |
-| Active deepening | +1 after the result above |
+| 成功 | 不降低 |
+| 失败 | -1 |
+| 失败 5 点或更多 | -2 |
+| 失败 10 点或更多，或自然 1 | -3 |
+| 主动深入 | 在上述基础上额外 -1 |
 
-A natural 20 succeeds. A natural 1 uses the strongest failure loss.
+自然 20 成功。自然 1 按最强失败损失处理。
 
-## Sanity States
+## 理智状态
 
-The module uses lost SAN to determine the current state.
-
-| Lost SAN | State | Effect |
+| 已损失理智 | 状态 | 效果 |
 | --- | --- | --- |
-| 0-1 | 稳定 | No effect. |
-| 2-4 | 动摇 | 下一次同源相关检定或豁免的结果减去 1d4。 |
-| 5-7 | 失衡 | 对同源理智豁免具有劣势；不能从同源现象获得优势。 |
-| 8-10 | 裂解 | Gains 1 裂解 symptom when the actor enters this state. |
-| 11+ or current SAN 0 | 崩溃 | Gains 1 崩溃 symptom when the actor enters this state. |
+| 0-1 | 稳定 | 无影响 |
+| 2-4 | 动摇 | 下一次同源相关检定或豁免的结果减去 1d4 |
+| 5-7 | 失衡 | 对同源理智豁免具有劣势；不能从同源现象获得优势 |
+| 8-10 | 裂解 | 进入该状态时获得 1 个裂解症状 |
+| 11+ 或当前理智为 0 | 崩溃 | 进入该状态时获得 1 个崩溃症状 |
 
-## Symptoms
+动摇和失衡只使用状态效果。只有裂解和崩溃会生成症状。
 
-Only 裂解 and 崩溃 use symptom effects. 动摇 and 失衡 only use their state effects.
+## 休息规则
 
-The symptom themes are:
+- 短休：移除裂解症状，然后重新计算理智状态。
+- 长休：恢复 1 点当前理智，移除理智症状，然后重新计算理智状态。
+- 当前理智不会超过最大理智。
+- 休息后的重新计算不会因为角色仍在裂解或崩溃而立刻再生成一个新症状。
 
-- 回避
-- 失语
-- 错误解释
-- 生理排斥
-- 过度专注
-- 仪式依赖
+## 版本记录
 
-Each symptom has separate 裂解 and 崩溃 text. 崩溃 symptoms are stronger and last longer.
+- `0.1.4`：收起外置场景工具栏按钮；新增 `/理智` 聊天控制台；DM 请求和玩家掷骰可直接在聊天卡中完成。
 
-## Rest Rules
+## 验证清单
 
-- Short rest removes 裂解 symptoms, then recalculates the current sanity state.
-- Long rest restores 1 current SAN, removes sanity symptoms, then recalculates the current sanity state.
-- Long rest does not raise SAN above the actor's maximum SAN.
-- Rest recalculation does not create a new symptom just because the actor is still in 裂解 or 崩溃.
+启用模块后，用测试角色验证，验证后删除测试角色：
 
-## GM Workflow
-
-1. Select target tokens or make sure online players have assigned characters.
-2. Use the module's SAN request control.
-3. Set DC, source, proficiency, and active deepening.
-4. Send the request.
-5. Players click SAN save or SAN check on their sheet.
-
-Players should not set the DC during normal play when `玩家必须等待 GM 发起` is enabled.
-
-## Verification Checklist
-
-After enabling the module in a world, verify these points with a test actor and then delete the test actor:
-
-- The module appears in Configure Settings.
-- Generate SAN with `4d6kh3` and confirm the actor's SAN value changes.
-- GM sends a SAN save request with a non-default DC.
-- Player clicks the actor-sheet SAN save and cannot edit the DC.
-- A failed save reduces current SAN and changes the visible state effect.
-- Entering 裂解 or 崩溃 creates a visible symptom effect.
-- Short rest removes 裂解 symptoms.
-- Long rest restores 1 SAN and removes sanity symptoms.
-
-## Notes
-
-This module is made for the private Cangfanjie campaign rules. It intentionally keeps the visible state and symptom text on the actor as Active Effects, so players and the GM can inspect the result without reading chat history.
+- 聊天框输入 `/理智` 后出现理智系统控制台。
+- GM 点击聊天控制台的 **发起理智判定**，设置一个非默认 DC。
+- 玩家收到聊天卡，并能点击卡内按钮掷骰。
+- 玩家掷骰时不能编辑 DC。
+- 失败后当前理智降低，角色卡 SAN 数值变化。
+- 进入裂解或崩溃时，角色获得可见状态和症状效应。
+- 短休移除裂解症状。
+- 长休恢复 1 点当前理智并移除理智症状。
