@@ -80,7 +80,7 @@ async function renderSanityPanel() {
 }
 
 function gmPanelContent() {
-  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button></div><p class="cfj-sanity-note">玩家会收到被发起后的强制弹窗和判定卡；也可以点击自己角色卡上的 SAN 检定 / SAN 豁免完成同一次请求。</p></div>`;
+  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button><button type="button" data-cfj-injury-action="rules">持续伤势规则</button><button type="button" data-cfj-injury-action="roll">投掷持续伤势</button></div><p class="cfj-sanity-note">玩家会收到被发起后的强制弹窗和判定卡；持续伤势是默认关闭的可选房规，开启后由 GM 手动触发。</p></div>`;
 }
 
 function selectedActors() {
@@ -173,5 +173,6 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
+
 
 
