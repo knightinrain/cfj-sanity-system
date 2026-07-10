@@ -93,6 +93,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 
 ## 版本记录
 
+- `0.1.5`：确保旧场景工具栏理智按钮在 ready 后也会被收起，避免外置按钮重新出现。
 - `0.1.4`：收起外置场景工具栏按钮；新增 `/理智` 聊天控制台；DM 请求和玩家掷骰可直接在聊天卡中完成。
 
 ## 验证清单
@@ -100,6 +101,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 启用模块后，用测试角色验证，验证后删除测试角色：
 
 - 聊天框输入 `/理智` 后出现理智系统控制台。
+- 场景工具栏里不再出现单独的理智按钮。
 - GM 点击聊天控制台的 **发起理智判定**，设置一个非默认 DC。
 - 玩家收到聊天卡，并能点击卡内按钮掷骰。
 - 玩家掷骰时不能编辑 DC。
