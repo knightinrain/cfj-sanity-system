@@ -1,4 +1,4 @@
-﻿const MODULE_ID = "cfj-sanity-system";
+const MODULE_ID = "cfj-sanity-system";
 const FLAG_SCOPE = "world";
 const SAN_FLAG = "sanity";
 const CHAT_BUTTON_ID = "cfj-sanity-chat-entry";
