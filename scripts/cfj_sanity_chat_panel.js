@@ -1,4 +1,4 @@
-const MODULE_ID = "cfj-sanity-system";
+﻿const MODULE_ID = "cfj-sanity-system";
 const FLAG_SCOPE = "world";
 const SAN_FLAG = "sanity";
 const CHAT_BUTTON_ID = "cfj-sanity-chat-entry";
@@ -40,7 +40,7 @@ function installSanityChatButton() {
     const row = document.createElement("div");
     row.id = CHAT_BUTTON_ID;
     row.className = "cfj-sanity-chat-entry";
-    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel"><i class="fas fa-brain"></i> 理智系统</button>`;
+    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel"><i class="fas fa-dice-d20"></i> 跑团房规</button>`;
     form.parentElement.insertBefore(row, form);
   }, 50);
 }
@@ -50,7 +50,7 @@ function installSanityChatCommand() {
     if (userId !== game.user.id) return;
     const content = String(data?.content ?? message?.content ?? "").trim();
     if (!["/理智", "/理智系统", "/san", "/sanity"].includes(content.toLowerCase())) return;
-    if (!game.user?.isGM) ui.notifications.warn("理智系统控制台只有 GM 可以打开。等待 GM 发起理智判定后，玩家会收到专用判定卡。");
+    if (!game.user?.isGM) ui.notifications.warn("苍梵界跑团房规控制台只有 GM 可以打开。等待 GM 发起理智判定后，玩家会收到专用判定弹窗和判定卡。");
     else renderSanityPanel();
     return false;
   });
@@ -71,16 +71,16 @@ function installSanityChatActions() {
 }
 
 async function renderSanityPanel() {
-  if (!game.user?.isGM) return ui.notifications.warn("理智系统控制台只有 GM 可以打开。");
+  if (!game.user?.isGM) return ui.notifications.warn("苍梵界跑团房规控制台只有 GM 可以打开。");
   await ChatMessage.create({
-    speaker: { alias: "理智系统" },
+    speaker: { alias: "苍梵界跑团房规" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
     content: gmPanelContent()
   });
 }
 
 function gmPanelContent() {
-  return `<div class="cfj-sanity-card"><h3>理智系统控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button></div><p class="cfj-sanity-note">玩家只会收到被发起后的判定卡，或点击自己角色卡上的 SAN 检定 / SAN 豁免。</p></div>`;
+  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button></div><p class="cfj-sanity-note">玩家会收到被发起后的强制弹窗和判定卡；也可以点击自己角色卡上的 SAN 检定 / SAN 豁免完成同一次请求。</p></div>`;
 }
 
 function selectedActors() {
@@ -135,14 +135,7 @@ function requestTargetRows() {
 
 async function requestForActorsFromChat(actors, data) {
   if (!game.user?.isGM) return;
-  for (const actor of actors) {
-    await actor.setFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`, data);
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      whisper: whisperRecipientsForActor(actor),
-      content: requestCardContent(actor, data)
-    });
-  }
+  await game.cfjSanity?.requestForActors?.(actors, data);
 }
 
 function whisperRecipientsForActor(actor) {
@@ -180,3 +173,5 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
+
+

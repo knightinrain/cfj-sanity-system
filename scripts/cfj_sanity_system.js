@@ -1,4 +1,4 @@
-const MODULE_ID = "cfj-sanity-system";
+﻿const MODULE_ID = "cfj-sanity-system";
 const FLAG_SCOPE = "world";
 const SAN_FLAG = "sanity";
 
@@ -58,11 +58,12 @@ Hooks.once("ready", () => {
   patchAbilityRolls();
   patchRestFlow();
   installSheetBridge();
+  registerSanitySocket();
   console.log(`${MODULE_ID} | ready`);
 });
 
 function exposeApi() {
-  game.cfjSanity = { installActor, generateSanity, requestDialog, requestForActors, rollSanity: runSanityRoll, refreshActor: refreshSanityState, restShort, restLong };
+  game.cfjSanity = { installActor, generateSanity, requestDialog, requestForActors, rollSanity: runSanityRoll, refreshActor: refreshSanityState, restShort, restLong, showRequestDialog: showSanityRequestDialog, showResultDialog: showSanityResultDialog };
 }
 
 function registerSettings() {
@@ -148,6 +149,68 @@ function installSheetBridge() {
     event.stopPropagation();
     await runSanityRoll(actor, wantsSave ? "save" : "check");
   }, true);
+}
+
+
+function registerSanitySocket() {
+  game.socket?.on?.(`module.${MODULE_ID}`, (message) => {
+    if (!message?.userIds?.includes?.(game.user.id)) return;
+    if (message.action === "sanityRequest") return showSanityRequestDialog(message.payload);
+    if (message.action === "sanityResult") return showSanityResultDialog(message.payload);
+  });
+}
+
+function onlinePlayerOwners(actor) {
+  return Array.from(game.users ?? []).filter((user) => user.active && !user.isGM && actor.testUserPermission?.(user, "OWNER"));
+}
+
+function emitToUsers(action, userIds, payload) {
+  const targets = [...new Set(userIds)].filter(Boolean);
+  if (!targets.length) return;
+  game.socket?.emit?.(`module.${MODULE_ID}`, { action, userIds: targets, payload });
+  if (targets.includes(game.user.id)) {
+    if (action === "sanityRequest") showSanityRequestDialog(payload);
+    if (action === "sanityResult") showSanityResultDialog(payload);
+  }
+}
+
+function requestId() {
+  return foundry.utils.randomID?.(16) ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function showSanityRequestDialog(payload) {
+  if (game.user?.isGM || !payload?.actorId) return;
+  const actor = game.actors.get(payload.actorId);
+  if (!actor?.isOwner) return;
+  const store = (globalThis.cfjSanityRequestDialogs ??= new Map());
+  if (store.has(payload.requestId)) return store.get(payload.requestId).bringToTop?.();
+  const label = payload.type === "check" ? "理智检定" : "理智豁免";
+  let rolled = false;
+  let dialog;
+  dialog = new Dialog({
+    title: `${label}要求`,
+    content: `<div class="cfj-sanity-popup"><p><strong>${escapeHtml(payload.actorName || actor.name)}</strong> 需要进行${label}。</p><p>DC、同源和风险由 GM 保存；玩家不能查看或修改。</p><p>这个窗口必须完成${label}后才会关闭。</p></div>`,
+    buttons: {
+      roll: { label: `进行${label}`, callback: async () => { rolled = true; store.delete(payload.requestId); await runSanityRoll(actor, payload.type || "save"); } }
+    },
+    close: () => {
+      store.delete(payload.requestId);
+      if (!rolled) setTimeout(() => showSanityRequestDialog(payload), 100);
+    }
+  });
+  store.set(payload.requestId, dialog);
+  dialog.render(true);
+}
+
+function showSanityResultDialog(payload) {
+  if (game.user?.isGM || !payload?.actorId) return;
+  const actor = game.actors.get(payload.actorId);
+  if (!actor?.isOwner) return;
+  const label = payload.type === "check" ? "理智检定" : "理智豁免";
+  const outcome = payload.success ? "成功" : "失败";
+  const loss = payload.loss ? `当前理智降低 ${payload.loss} 点` : "当前理智没有降低";
+  const content = `<div class="cfj-sanity-popup"><h3>${label}结果：${outcome}</h3><table><tr><th>掷骰结果</th><td>${payload.total}</td></tr><tr><th>理智变化</th><td>${loss}</td></tr><tr><th>当前理智</th><td>${payload.current}/${payload.max} -> ${payload.next}/${payload.max}</td></tr><tr><th>理智状态</th><td>${escapeHtml(payload.previousStateLabel || "")} -> ${escapeHtml(payload.stateLabel || "")}</td></tr></table><p>角色卡上的理智状态、症状和效应已经按本次结果更新。</p></div>`;
+  new Dialog({ title: `${label}结果`, content, buttons: { ok: { label: "关闭" } } }).render(true);
 }
 
 function actorFromElement(element) {
@@ -317,8 +380,27 @@ async function runSanityRoll(actor, type = "save") {
   if (messageWhisper?.length) messageData.whisper = messageWhisper;
   await roll.toMessage(messageData);
   if ((pending || game.user?.isGM) && setting("showGmDetail", true)) await renderGmDetail(actor, data, dc, total, failBy);
+  if (pending) {
+    const owners = onlinePlayerOwners(actor);
+    emitToUsers("sanityResult", owners.map((user) => user.id), {
+      requestId: data.requestId,
+      actorId: actor.id,
+      actorName: actor.name,
+      type,
+      total,
+      success,
+      loss,
+      current,
+      next,
+      max,
+      previousState,
+      previousStateLabel: STATES[previousState]?.label,
+      state: stateFor(next, max),
+      stateLabel: STATES[stateFor(next, max)]?.label
+    });
+  }
+  return { actor, type, total, success, loss, current, next, max, dc, failBy };
 }
-
 function renderRollChat(r) {
   const label = r.type === "save" ? "理智豁免" : "理智检定";
   return `<h3>${label}</h3><table><tr><th>${label}</th><td>${r.total}，${r.success ? "成功" : "失败"}</td></tr><tr><th>理智变化</th><td>${r.loss ? `-${r.loss}` : "不降低"}</td></tr><tr><th>当前理智</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>同源</th><td>${escapeHtml(r.source || "未命名来源")}</td></tr></table>`;
@@ -366,16 +448,24 @@ function requestDialog() {
 
 async function requestForActors(actors, data) {
   if (!game.user?.isGM) return;
+  const skipped = [];
   for (const actor of actors) {
-    await actor.setFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`, data);
+    const owners = onlinePlayerOwners(actor);
+    if (!owners.length) {
+      skipped.push(actor.name);
+      continue;
+    }
+    const pendingData = { ...data, requestId: requestId() };
+    await actor.setFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`, pendingData);
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       whisper: sanityRecipients(actor),
-      content: requestCardContent(actor, data)
+      content: requestCardContent(actor, pendingData)
     });
+    emitToUsers("sanityRequest", owners.map((user) => user.id), { actorId: actor.id, actorName: actor.name, type: pendingData.type, requestId: pendingData.requestId });
   }
+  if (skipped.length) ui.notifications.warn(`这些角色没有在线玩家拥有者，已取消理智判定：${skipped.join("、")}`);
 }
-
 function sanityRecipients(actor) {
   const recipients = new Set();
   for (const user of game.users ?? []) {
@@ -419,3 +509,8 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((c) => map[c] ?? c).join("");
 }
+
+
+
+
+
