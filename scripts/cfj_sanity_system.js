@@ -58,7 +58,6 @@ Hooks.once("ready", () => {
   patchAbilityRolls();
   patchRestFlow();
   installSheetBridge();
-  installControlButton();
   console.log(`${MODULE_ID} | ready`);
 });
 
@@ -157,16 +156,6 @@ function actorFromElement(element) {
   return id ? game.actors.get(id) : null;
 }
 
-function installControlButton() {
-  Hooks.on("getSceneControlButtons", (controls) => {
-    if (!game.user?.isGM) return;
-    const tokenControls = Array.isArray(controls) ? controls.find((c) => c.name === "token") : controls.tokens;
-    if (!tokenControls) return;
-    const tool = { name: "cfj-sanity-request", title: "发起理智判定", icon: "fas fa-brain", button: true, onClick: () => requestDialog() };
-    if (Array.isArray(tokenControls.tools)) tokenControls.tools.push(tool);
-    else tokenControls.tools["cfj-sanity-request"] = tool;
-  });
-}
 
 async function generateSanity(actor) {
   actor = resolveActor(actor);
@@ -174,7 +163,7 @@ async function generateSanity(actor) {
   const roll = await new Roll("4d6kh3").evaluate({ async: true });
   await setSanity(actor, roll.total, roll.total);
   await refreshSanityState(actor, { forceState: true });
-  await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), flavor: `<strong>生成理智值</strong><br>${escapeHtml(actor.name)} 的最大理智值为 ${roll.total}。` });
+  await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), whisper: sanityRecipients(actor), flavor: `<strong>生成理智值</strong><br>${escapeHtml(actor.name)} 的最大理智值为 ${roll.total}。` });
 }
 
 async function installActor(actor) {
@@ -233,7 +222,7 @@ function stateFor(current, max) {
   return "stable";
 }
 
-async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false } = {}) {
+async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false, messageWhisper = null } = {}) {
   const flags = getSanity(actor);
   const visible = getVisibleSanity(actor);
   const current = Number(flags.current ?? visible.current ?? actor.system?.abilities?.san?.value ?? 0);
@@ -243,7 +232,7 @@ async function refreshSanityState(actor, { previousState = null, forceState = fa
   await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, state, stateText: STATES[state].label });
   await syncStateEffect(actor, state, current, max, loss);
   const shouldAddSymptom = setting("autoSymptoms", true) && !suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState);
-  if (shouldAddSymptom) await addSymptom(actor, state);
+  if (shouldAddSymptom) await addSymptom(actor, state, { messageWhisper });
 }
 
 async function syncStateEffect(actor, state, current, max, loss) {
@@ -263,7 +252,7 @@ async function syncStateEffect(actor, state, current, max, loss) {
   }]);
 }
 
-async function addSymptom(actor, state) {
+async function addSymptom(actor, state, { messageWhisper = null } = {}) {
   const severity = state === "collapsed" ? "collapsed" : "fractured";
   const keys = Object.keys(SYMPTOMS);
   const roll = await new Roll(`1d${keys.length}`).evaluate({ async: true });
@@ -284,7 +273,9 @@ async function addSymptom(actor, state) {
     description: symptomDescription(symptom, severity),
     flags: { [MODULE_ID]: flagData }
   }]);
-  await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), flavor: `<strong>${severity === "collapsed" ? "崩溃症状" : "裂解症状"}：${SYMPTOMS[key].label}</strong><br>${symptom.text}<br><strong>持续：</strong>${symptom.duration}` });
+  const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: `<strong>${severity === "collapsed" ? "崩溃症状" : "裂解症状"}：${SYMPTOMS[key].label}</strong><br>${symptom.text}<br><strong>持续：</strong>${symptom.duration}` };
+  if (messageWhisper?.length) messageData.whisper = messageWhisper;
+  await roll.toMessage(messageData);
 }
 
 function symptomDescription(symptom, severity) {
@@ -300,6 +291,7 @@ async function runSanityRoll(actor, type = "save") {
   if (!pending && !game.user?.isGM && setting("requireGmRequest", true)) return ui.notifications.warn("目前没有 GM 发起的理智判定。玩家不能自行设置 DC。");
   const data = pending ?? (game.user?.isGM ? await promptLocalRollOptions(type) : defaultRollOptions(type));
   if (!data) return;
+  const messageWhisper = pending ? sanityRecipients(actor) : null;
   const dc = Number(data.dc || setting("defaultDc", 15));
   const visible = getVisibleSanity(actor);
   const current = Number(flags.current ?? actor.system?.abilities?.san?.value ?? visible.current ?? 10);
@@ -320,9 +312,11 @@ async function runSanityRoll(actor, type = "save") {
   const next = Math.max(0, current - loss);
   await setSanity(actor, next, max);
   if (pending) await actor.unsetFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`);
-  await refreshSanityState(actor, { previousState });
-  await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), flavor: renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source }) });
-  if (game.user?.isGM && setting("showGmDetail", true)) await renderGmDetail(actor, data, dc, total);
+  await refreshSanityState(actor, { previousState, messageWhisper });
+  const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source }) };
+  if (messageWhisper?.length) messageData.whisper = messageWhisper;
+  await roll.toMessage(messageData);
+  if ((pending || game.user?.isGM) && setting("showGmDetail", true)) await renderGmDetail(actor, data, dc, total, failBy);
 }
 
 function renderRollChat(r) {
@@ -330,12 +324,12 @@ function renderRollChat(r) {
   return `<h3>${label}</h3><table><tr><th>${label}</th><td>${r.total}，${r.success ? "成功" : "失败"}</td></tr><tr><th>理智变化</th><td>${r.loss ? `-${r.loss}` : "不降低"}</td></tr><tr><th>当前理智</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>同源</th><td>${escapeHtml(r.source || "未命名来源")}</td></tr></table>`;
 }
 
-async function renderGmDetail(actor, data, dc, total) {
+async function renderGmDetail(actor, data, dc, total, failBy = 0) {
   const intensity = dc >= 20 ? "极端异常" : dc >= 17 ? "严重异常" : dc >= 15 ? "强烈异常" : dc >= 13 ? "明确异常" : "轻微异常";
   await ChatMessage.create({
     speaker: { alias: "理智系统" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
-    content: `<h3>理智判定 GM 明细</h3><p>${escapeHtml(actor.name)}</p><table><tr><th>DC</th><td>${dc}（${intensity}）</td></tr><tr><th>掷骰结果</th><td>${total}</td></tr><tr><th>同源</th><td>${escapeHtml(data.source || "未命名来源")}</td></tr><tr><th>主动深入</th><td>${data.deep ? "是" : "否"}</td></tr><tr><th>加入熟练</th><td>${data.proficient ? "是" : "否"}</td></tr></table>`
+    content: `<h3>理智判定 GM 明细</h3><p>${escapeHtml(actor.name)}</p><table><tr><th>DC</th><td>${dc}（${intensity}）</td></tr><tr><th>掷骰结果</th><td>${total}</td></tr><tr><th>失败差值</th><td>${failBy}</td></tr><tr><th>同源</th><td>${escapeHtml(data.source || "未命名来源")}</td></tr><tr><th>主动深入</th><td>${data.deep ? "是" : "否"}</td></tr><tr><th>加入熟练</th><td>${data.proficient ? "是" : "否"}</td></tr></table>`
   });
 }
 
@@ -374,8 +368,25 @@ async function requestForActors(actors, data) {
   if (!game.user?.isGM) return;
   for (const actor of actors) {
     await actor.setFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`, data);
-    await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content: `<h3>${data.type === "save" ? "理智豁免" : "理智检定"}</h3><p>GM 已发起理智判定。玩家只需点击角色卡上的 SAN ${data.type === "save" ? "豁免" : "检定"}；DC 和风险由 DM 设置。</p>` });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      whisper: sanityRecipients(actor),
+      content: requestCardContent(actor, data)
+    });
   }
+}
+
+function sanityRecipients(actor) {
+  const recipients = new Set();
+  for (const user of game.users ?? []) {
+    if (user.isGM || actor.testUserPermission?.(user, "OWNER")) recipients.add(user.id);
+  }
+  return [...recipients];
+}
+
+function requestCardContent(actor, data) {
+  const label = data.type === "save" ? "理智豁免" : "理智检定";
+  return `<div class="cfj-sanity-card cfj-sanity-request"><h3>${label}</h3><p>GM 已对 ${escapeHtml(actor.name)} 发起 ${label}。玩家不需要设置 DC；DC、同源和风险由 GM 保存到本次请求中。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="roll" data-actor-id="${actor.id}" data-roll-type="${data.type}">进行${label}</button></div><p class="cfj-sanity-note">也可以点击角色卡上的 SAN ${data.type === "save" ? "豁免" : "检定"}。两种方式使用同一组 GM 参数。</p></div>`;
 }
 
 async function restShort(actor) {
