@@ -32,9 +32,21 @@ function registerInjurySettings() {
   const register = (key, data) => game.settings.register(CFJ_INJURY_MODULE_ID, key, { scope: "world", config: true, ...data });
   register("enableInjuryRules", {
     name: "【持续伤势】启用持续伤势房规",
-    hint: "默认关闭。开启后，GM 可以在跑团房规控制台中手动投掷持续伤势表。关闭时，所有伤势按钮只显示规则说明，不产生任何伤势结果。",
+    hint: "默认关闭。开启后，GM 可以在跑团房规控制台中选择目标和伤害类型；模块会自动投掷对应持续伤势表并写入结果。关闭时，所有伤势按钮只显示规则说明，不产生任何伤势结果。",
     type: Boolean,
     default: false
+  });
+  register("autoCreateInjuryEffects", {
+    name: "【持续伤势】自动添加伤势效应",
+    hint: "开启后，投掷持续伤势表时，会把随机表结果写入目标角色的 ActiveEffect。该效应用于显示和追踪，不会自动改生命值。",
+    type: Boolean,
+    default: true
+  });
+  register("injuryEffectMidiReady", {
+    name: "【持续伤势】效应预留 Midi/DAE 标记",
+    hint: "开启后，伤势效应会带有可供后续 Midi-QOL/DAE 映射使用的 flags。当前不会硬套数值惩罚，避免把叙事伤势错误自动化。",
+    type: Boolean,
+    default: true
   });
   register("injuryTriggerCritical", {
     name: "【持续伤势】触发：暴击",
@@ -86,7 +98,7 @@ async function showInjuryRules() {
   await ChatMessage.create({
     speaker: { alias: "苍梵界跑团房规" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
-    content: `<div class="cfj-sanity-card"><h3>持续伤势房规</h3><p><strong>当前状态：</strong>${enabled ? "已启用" : "未启用"}</p><p>持续伤势只用于强调严重创伤，不替代生命值、死亡豁免或普通状态。默认由 GM 手动触发；本模块暂不接管 Midi-QOL 的伤害结算，也不会自动修改生命值上限。</p><table><tr><th>可用触发</th><td>${crit ? "暴击造成实际伤害" : "暴击触发已关闭"}；${severe ? `造成伤害的豁免失败 ${severeBy} 点或更多` : "豁免严重失败触发已关闭"}</td></tr><tr><th>使用限制</th><td>同一次攻击、法术、陷阱或环境事件通常只投一次。若一次伤害含多种类型，使用造成伤害最高的类型；无法判定时由 GM 选择最贴合叙事的一种。</td></tr><tr><th>不触发</th><td>未造成实际伤害、临时生命值完全吸收、纯叙事擦伤、玩家不在场、GM 判断会打断节奏的普通小战斗。</td></tr><tr><th>后续处理</th><td>伤势结果由表格给出。需要部位时，再按结果要求投掷大肢体、小肢体或由 GM 指定。需要治疗、手术或长期适应时，按桌面裁定处理。</td></tr></table><p class="cfj-sanity-note">这些规则来自现有 Maxwell 伤势资料的苍梵界桌面化整理；物品包不纳入本模块。</p></div>`
+    content: `<div class="cfj-sanity-card"><h3>持续伤势房规</h3><p><strong>当前状态：</strong>${enabled ? "已启用" : "未启用"}</p><p>持续伤势只用于强调严重创伤，不替代生命值、死亡豁免或普通状态。GM 选择目标和伤害类型后，模块会自动投掷对应随机表，并可把结果写成角色效应。本模块暂不接管 Midi-QOL 的伤害结算，也不会自动修改生命值上限。</p><table><tr><th>可用触发</th><td>${crit ? "暴击造成实际伤害" : "暴击触发已关闭"}；${severe ? `造成伤害的豁免失败 ${severeBy} 点或更多` : "豁免严重失败触发已关闭"}</td></tr><tr><th>使用限制</th><td>同一次攻击、法术、陷阱或环境事件通常只投一次。若一次伤害含多种类型，使用造成伤害最高的类型；无法判定时由 GM 选择最贴合叙事的一种。</td></tr><tr><th>不触发</th><td>未造成实际伤害、临时生命值完全吸收、纯叙事擦伤、玩家不在场、GM 判断会打断节奏的普通小战斗。</td></tr><tr><th>后续处理</th><td>伤势结果由表格给出。需要部位时，再按结果要求投掷大肢体、小肢体或由 GM 指定。需要治疗、手术或长期适应时，按桌面裁定处理。</td></tr></table><p class="cfj-sanity-note">这些规则来自现有 Maxwell 伤势资料的苍梵界桌面化整理；物品包不纳入本模块。</p></div>`
   });
 }
 
@@ -103,7 +115,7 @@ function promptInjuryRoll() {
   const names = actors.length ? actors.map((actor) => escapeInjuryHtml(actor.name)).join("、") : "未选择角色";
   new Dialog({
     title: "投掷持续伤势",
-    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p><div class="form-group"><label>触发原因</label><select name="trigger"><option value="critical">暴击造成实际伤害</option><option value="severe-save">造成伤害的豁免严重失败</option><option value="gm">GM 手动裁定</option></select></div><div class="form-group"><label>伤害类型</label><select name="damage">${options}</select></div><div class="form-group"><label>备注</label><input name="note" type="text" value=""></div><p class="notes">此处只投掷伤势表并生成聊天结果，不自动修改生命值、生命值上限、装备或状态。</p></form>`,
+    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p><div class="form-group"><label>触发原因</label><select name="trigger"><option value="critical">暴击造成实际伤害</option><option value="severe-save">造成伤害的豁免严重失败</option><option value="gm">GM 手动裁定</option></select></div><div class="form-group"><label>伤害类型</label><select name="damage">${options}</select></div><div class="form-group"><label>备注</label><input name="note" type="text" value=""></div><p class="notes">模块会自动投掷对应伤势表。若开启“自动添加伤势效应”，结果会写入目标角色效应；不会自动修改生命值、生命值上限或装备。</p></form>`,
     buttons: {
       roll: { label: "投掷伤势", callback: async (html) => {
         const form = html[0]?.querySelector("form");
@@ -131,13 +143,61 @@ async function rollInjury({ actors = [], trigger = "gm", damage = "slashing", no
   const rollText = await roll.render();
   const result = table ? findTableResult(table, roll.total) : null;
   const actorNames = actors.length ? actors.map((actor) => escapeInjuryHtml(actor.name)).join("、") : "未指定角色";
+  const effectIds = await applyInjuryEffects(actors, { tableInfo, result, rollTotal: roll.total, trigger, note });
   await ChatMessage.create({
     speaker: { alias: "苍梵界跑团房规" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
-    content: `<div class="cfj-sanity-card"><h3>持续伤势：${tableInfo.label}</h3><table><tr><th>目标</th><td>${actorNames}</td></tr><tr><th>触发</th><td>${triggerLabel(trigger)}</td></tr><tr><th>投骰</th><td>${roll.total}</td></tr><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>结果</th><td>${result ? renderTableResult(result) : "未找到对应表格结果；请打开原始 RollTable 手动核对。"}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table>${rollText}<p class="cfj-sanity-note">本结果只提示伤势内容。是否需要部位表、治疗、手术或长期适应，由 GM 根据当前场景裁定。</p></div>`
+    content: `<div class="cfj-sanity-card"><h3>持续伤势：${tableInfo.label}</h3><table><tr><th>目标</th><td>${actorNames}</td></tr><tr><th>触发</th><td>${triggerLabel(trigger)}</td></tr><tr><th>投骰</th><td>${roll.total}</td></tr><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>结果</th><td>${result ? renderTableResult(result) : "未找到对应表格结果；请打开原始 RollTable 手动核对。"}</td></tr><tr><th>角色效应</th><td>${effectIds.length ? `已写入 ${effectIds.length} 个伤势效应` : "未写入；未选择目标、设置关闭或表格结果缺失"}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table>${rollText}<p class="cfj-sanity-note">本结果自动来自随机表。是否需要部位表、治疗、手术或长期适应，由 GM 根据当前场景裁定。</p></div>`
   });
 }
 
+
+async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigger, note }) {
+  if (!injurySetting("autoCreateInjuryEffects", true)) return [];
+  if (!result || !actors?.length) return [];
+  const effectIds = [];
+  const resultText = result.text ?? result.description ?? result.name ?? "未命名伤势";
+  const range = result.range ? `${result.range[0]}-${result.range[1]}` : String(rollTotal);
+  const midiReady = injurySetting("injuryEffectMidiReady", true);
+  for (const actor of actors) {
+    if (!actor?.createEmbeddedDocuments) continue;
+    const effectData = {
+      name: `持续伤势：${tableInfo.label} ${range}`,
+      icon: "icons/svg/blood.svg",
+      origin: actor.uuid,
+      disabled: false,
+      changes: [],
+      description: injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note }),
+      flags: {
+        [CFJ_INJURY_MODULE_ID]: {
+          type: "injury",
+          damage: tableInfo.label,
+          table: tableInfo.table,
+          range,
+          rollTotal,
+          trigger,
+          text: resultText,
+          midiReady
+        }
+      }
+    };
+    if (midiReady) {
+      effectData.flags.dae = { transfer: false, stackable: "multi" };
+      effectData.flags["midi-qol"] = { cfjInjury: true };
+    }
+    try {
+      const created = await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+      effectIds.push(...created.map((effect) => effect.id));
+    } catch (err) {
+      console.warn(`${CFJ_INJURY_MODULE_ID} | 无法写入持续伤势效应`, actor?.name, err);
+    }
+  }
+  return effectIds;
+}
+
+function injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note }) {
+  return `<p><strong>持续伤势：${escapeInjuryHtml(tableInfo.label)}</strong></p><table><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>范围</th><td>${escapeInjuryHtml(range)}</td></tr><tr><th>投骰</th><td>${escapeInjuryHtml(rollTotal)}</td></tr><tr><th>触发</th><td>${escapeInjuryHtml(triggerLabel(trigger))}</td></tr><tr><th>结果</th><td>${escapeInjuryHtml(resultText)}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table><p>此效应用于记录伤势。是否产生速度、检定、攻击、反应或治疗限制，由该伤势原文和 GM 裁定；未逐条映射前不会自动套用数值惩罚。</p>`;
+}
 function selectedInjuryActors() {
   const actors = (canvas?.tokens?.controlled ?? []).map((token) => token.actor).filter(Boolean);
   const byId = new Map();
@@ -194,5 +254,7 @@ function escapeInjuryHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
+
+
 
 

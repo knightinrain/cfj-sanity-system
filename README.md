@@ -91,7 +91,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 
 持续伤势默认关闭。需要使用时，GM 在模块设置中开启 **启用持续伤势房规**。
 
-这个规则只用于严重创伤，不替代生命值、死亡豁免或普通状态。当前版本不接管 Midi-QOL 的伤害结算，不自动修改生命值、生命值上限、装备或状态。
+这个规则只用于严重创伤，不替代生命值、死亡豁免或普通状态。当前版本不接管 Midi-QOL 的伤害结算，不自动修改生命值、生命值上限或装备。它会先把随机表结果做成 ActiveEffect；明确规则效果需要逐条映射后，才适合进一步交给 Midi-QOL/DAE 自动化。
 
 ### 触发条件
 
@@ -121,7 +121,8 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 2. 点击 **持续伤势规则** 查看当前开关、触发条件和使用限制。
 3. 若已启用持续伤势，点击 **投掷持续伤势**。
 4. 选择触发原因和伤害类型。
-5. 模块投掷 `3d6` 并生成只对 GM 可见的持续伤势结果。
+5. 模块投掷 `3d6`，自动读取对应随机表，并生成只对 GM 可见的持续伤势结果。
+6. 若开启 **【持续伤势】自动添加伤势效应**，模块会把结果写入目标角色的 ActiveEffect，玩家和 GM 可在角色效应页查看。
 
 若结果要求确定部位，GM 再根据场景选择大肢体、小肢体表，或直接指定最合理的部位。
 
@@ -156,6 +157,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 
 ## 版本记录
 
+- `0.2.2`：持续伤势改为自动掷随机表并读取结果；可自动把伤势结果写成目标角色 ActiveEffect；伤势效应预留 Midi-QOL/DAE flags，但不硬套未映射的数值惩罚。
 - `0.2.1`：模块设置按【理智】、【持续伤势】、【骑乘】分区；理智、持续伤势和骑乘都增加独立启用开关；GM 控制台按功能块显示当前启用状态。
 - `0.2.0`：并入原 `rideable_simple` 骑乘功能；所有跑团用小模块统一归入“苍梵界跑团房规”；新增内置骑乘、下马、跟随、HUD 按钮和中文设置项。
 - `0.1.9`：新增默认关闭的持续伤势房规；GM 控制台增加持续伤势规则说明和手动投掷入口；模块不接管伤害/HP 自动化。
@@ -180,6 +182,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 - 进入裂解或崩溃时，角色获得可见状态和症状效应。
 - 短休移除裂解症状。
 - 长休恢复 1 点当前理智并移除理智症状。
+
 
 
 
