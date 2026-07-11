@@ -16,6 +16,15 @@ const CFJ_DAMAGE_TABLES = {
   thunder: { label: "雷鸣伤害", table: "雷鸣伤害" }
 };
 
+const EFFECT_MODES = {
+  CUSTOM: 0,
+  MULTIPLY: 1,
+  ADD: 2,
+  DOWNGRADE: 3,
+  UPGRADE: 4,
+  OVERRIDE: 5
+};
+
 Hooks.once("init", registerInjurySettings);
 
 Hooks.once("ready", () => {
@@ -44,7 +53,13 @@ function registerInjurySettings() {
   });
   register("injuryEffectMidiReady", {
     name: "【持续伤势】效应预留 Midi/DAE 标记",
-    hint: "开启后，伤势效应会带有可供后续 Midi-QOL/DAE 映射使用的 flags。当前不会硬套数值惩罚，避免把叙事伤势错误自动化。",
+    hint: "开启后，伤势效应会带有可供 Midi-QOL/DAE 识别的 flags。",
+    type: Boolean,
+    default: true
+  });
+  register("injuryApplyMappedMechanics", {
+    name: "【持续伤势】自动套用明确机械效果",
+    hint: "开启后，模块会把已经规则化的伤势结果写成 DAE/Midi 可读取的机械效果，例如减速、攻击劣势、检定劣势、专注豁免劣势。无法可靠识别的结果仍只做记录。",
     type: Boolean,
     default: true
   });
@@ -95,10 +110,11 @@ async function showInjuryRules() {
   const crit = injurySetting("injuryTriggerCritical", true);
   const severe = injurySetting("injuryTriggerSevereSave", true);
   const severeBy = Number(injurySetting("injurySevereFailBy", 5));
+  const mapped = injurySetting("injuryApplyMappedMechanics", true);
   await ChatMessage.create({
     speaker: { alias: "苍梵界跑团房规" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
-    content: `<div class="cfj-sanity-card"><h3>持续伤势房规</h3><p><strong>当前状态：</strong>${enabled ? "已启用" : "未启用"}</p><p>持续伤势只用于强调严重创伤，不替代生命值、死亡豁免或普通状态。GM 选择目标和伤害类型后，模块会自动投掷对应随机表，并可把结果写成角色效应。本模块暂不接管 Midi-QOL 的伤害结算，也不会自动修改生命值上限。</p><table><tr><th>可用触发</th><td>${crit ? "暴击造成实际伤害" : "暴击触发已关闭"}；${severe ? `造成伤害的豁免失败 ${severeBy} 点或更多` : "豁免严重失败触发已关闭"}</td></tr><tr><th>使用限制</th><td>同一次攻击、法术、陷阱或环境事件通常只投一次。若一次伤害含多种类型，使用造成伤害最高的类型；无法判定时由 GM 选择最贴合叙事的一种。</td></tr><tr><th>不触发</th><td>未造成实际伤害、临时生命值完全吸收、纯叙事擦伤、玩家不在场、GM 判断会打断节奏的普通小战斗。</td></tr><tr><th>后续处理</th><td>伤势结果由表格给出。需要部位时，再按结果要求投掷大肢体、小肢体或由 GM 指定。需要治疗、手术或长期适应时，按桌面裁定处理。</td></tr></table><p class="cfj-sanity-note">这些规则来自现有 Maxwell 伤势资料的苍梵界桌面化整理；物品包不纳入本模块。</p></div>`
+    content: `<div class="cfj-sanity-card"><h3>持续伤势房规</h3><p><strong>当前状态：</strong>${enabled ? "已启用" : "未启用"}</p><p>持续伤势只用于强调严重创伤，不替代生命值、死亡豁免或普通状态。GM 选择目标和伤害类型后，模块会自动投掷对应随机表，并可把结果写成角色效应。本模块不接管生命值结算，也不会自动修改生命值上限。</p><table><tr><th>可用触发</th><td>${crit ? "暴击造成实际伤害" : "暴击触发已关闭"}；${severe ? `造成伤害的豁免失败 ${severeBy} 点或更多` : "豁免严重失败触发已关闭"}</td></tr><tr><th>机械效果</th><td>${mapped ? "已开启。已规则化的伤势会自动写入 DAE/Midi 可读取效果；无法识别的伤势只记录。" : "已关闭。伤势只写入说明，不套用机械效果。"}</td></tr><tr><th>使用限制</th><td>同一次攻击、法术、陷阱或环境事件通常只投一次。若一次伤害含多种类型，使用造成伤害最高的类型；无法判定时由 GM 选择最贴合叙事的一种。</td></tr><tr><th>不触发</th><td>未造成实际伤害、临时生命值完全吸收、纯叙事擦伤、玩家不在场、GM 判断会打断节奏的普通小战斗。</td></tr><tr><th>后续处理</th><td>伤势结果由表格给出。需要部位时，再按结果要求投掷大肢体、小肢体或由 GM 指定。需要治疗、手术或长期适应时，按桌面裁定处理。</td></tr></table><p class="cfj-sanity-note">这些规则来自现有 Maxwell 伤势资料的苍梵界桌面化整理；物品包不纳入本模块。</p></div>`
   });
 }
 
@@ -115,7 +131,7 @@ function promptInjuryRoll() {
   const names = actors.length ? actors.map((actor) => escapeInjuryHtml(actor.name)).join("、") : "未选择角色";
   new Dialog({
     title: "投掷持续伤势",
-    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p><div class="form-group"><label>触发原因</label><select name="trigger"><option value="critical">暴击造成实际伤害</option><option value="severe-save">造成伤害的豁免严重失败</option><option value="gm">GM 手动裁定</option></select></div><div class="form-group"><label>伤害类型</label><select name="damage">${options}</select></div><div class="form-group"><label>备注</label><input name="note" type="text" value=""></div><p class="notes">模块会自动投掷对应伤势表。若开启“自动添加伤势效应”，结果会写入目标角色效应；不会自动修改生命值、生命值上限或装备。</p></form>`,
+    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p><div class="form-group"><label>触发原因</label><select name="trigger"><option value="critical">暴击造成实际伤害</option><option value="severe-save">造成伤害的豁免严重失败</option><option value="gm">GM 手动裁定</option></select></div><div class="form-group"><label>伤害类型</label><select name="damage">${options}</select></div><div class="form-group"><label>备注</label><input name="note" type="text" value=""></div><p class="notes">模块会自动投掷对应伤势表。若开启“自动添加伤势效应”，结果会写入目标角色效应；若开启“自动套用明确机械效果”，已规则化结果会写入 DAE/Midi 可读取效果；不会自动修改生命值、生命值上限或装备。</p></form>`,
     buttons: {
       roll: { label: "投掷伤势", callback: async (html) => {
         const form = html[0]?.querySelector("form");
@@ -151,7 +167,6 @@ async function rollInjury({ actors = [], trigger = "gm", damage = "slashing", no
   });
 }
 
-
 async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigger, note }) {
   if (!injurySetting("autoCreateInjuryEffects", true)) return [];
   if (!result || !actors?.length) return [];
@@ -161,13 +176,14 @@ async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigge
   const midiReady = injurySetting("injuryEffectMidiReady", true);
   for (const actor of actors) {
     if (!actor?.createEmbeddedDocuments) continue;
+    const mapped = injurySetting("injuryApplyMappedMechanics", true) ? mapInjuryMechanics(resultText, tableInfo) : injuryNoMappedMechanics();
     const effectData = {
       name: `持续伤势：${tableInfo.label} ${range}`,
       icon: "icons/svg/blood.svg",
       origin: actor.uuid,
       disabled: false,
-      changes: [],
-      description: injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note }),
+      changes: mapped.changes,
+      description: injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note, mapped }),
       flags: {
         [CFJ_INJURY_MODULE_ID]: {
           type: "injury",
@@ -177,13 +193,17 @@ async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigge
           rollTotal,
           trigger,
           text: resultText,
-          midiReady
+          midiReady,
+          mechanics: mapped.id,
+          mechanicsLabel: mapped.label,
+          mechanicsSummary: mapped.summary,
+          mechanicalTags: mapped.tags
         }
       }
     };
     if (midiReady) {
       effectData.flags.dae = { transfer: false, stackable: "multi" };
-      effectData.flags["midi-qol"] = { cfjInjury: true };
+      effectData.flags["midi-qol"] = { cfjInjury: true, cfjInjuryMechanics: mapped.id };
     }
     try {
       const created = await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
@@ -195,9 +215,167 @@ async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigge
   return effectIds;
 }
 
-function injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note }) {
-  return `<p><strong>持续伤势：${escapeInjuryHtml(tableInfo.label)}</strong></p><table><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>范围</th><td>${escapeInjuryHtml(range)}</td></tr><tr><th>投骰</th><td>${escapeInjuryHtml(rollTotal)}</td></tr><tr><th>触发</th><td>${escapeInjuryHtml(triggerLabel(trigger))}</td></tr><tr><th>结果</th><td>${escapeInjuryHtml(resultText)}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table><p>此效应用于记录伤势。是否产生速度、检定、攻击、反应或治疗限制，由该伤势原文和 GM 裁定；未逐条映射前不会自动套用数值惩罚。</p>`;
+function injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trigger, note, mapped }) {
+  const changes = mapped?.changeLabels?.length ? mapped.changeLabels.map((line) => `<li>${escapeInjuryHtml(line)}</li>`).join("") : "<li>无自动机械效果；仅记录伤势。</li>";
+  const cautions = mapped?.cautions?.length ? `<p><strong>仍需 GM 裁定：</strong>${mapped.cautions.map(escapeInjuryHtml).join("；")}</p>` : "";
+  return `<p><strong>持续伤势：${escapeInjuryHtml(tableInfo.label)}</strong></p><table><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>范围</th><td>${escapeInjuryHtml(range)}</td></tr><tr><th>投骰</th><td>${escapeInjuryHtml(rollTotal)}</td></tr><tr><th>触发</th><td>${escapeInjuryHtml(triggerLabel(trigger))}</td></tr><tr><th>结果</th><td>${escapeInjuryHtml(resultText)}</td></tr><tr><th>规则化</th><td>${escapeInjuryHtml(mapped?.label ?? "未映射")}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table><p><strong>自动效果：</strong>${escapeInjuryHtml(mapped?.summary ?? "无")}</p><ul>${changes}</ul>${cautions}`;
 }
+
+function mapInjuryMechanics(resultText, tableInfo) {
+  const text = normalizeInjuryText(`${tableInfo?.label ?? ""} ${resultText ?? ""}`);
+  if (/(死亡|死去|立即死亡|毙命)/.test(text)) {
+    return mechanicalProfile({
+      id: "fatal",
+      label: "致命伤",
+      summary: "不自动杀死角色；此类结果必须由 GM 结合法术、死亡豁免和桌面裁定处理。",
+      cautions: ["不会自动把生命值设为 0", "不会自动改变死亡豁免"]
+    });
+  }
+  if (/(失去|切断|斩断|截断|断掉|断裂|粉碎).*(手臂|胳膊|手|腿|脚|足|肢|肢体)|断肢|残肢|截肢/.test(text)) {
+    return mechanicalProfile({
+      id: "lost-limb",
+      label: "失去肢体",
+      summary: "移动速度降低 10 尺；攻击具有劣势；敏捷和力量检定具有劣势。需要假肢、再生或长期适应。",
+      changes: [
+        movementChange("walk", -10),
+        movementChange("climb", -10),
+        disadvantage("flags.midi-qol.disadvantage.attack.all", "所有攻击具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.ability.check.dex", "敏捷检定具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.ability.check.str", "力量检定具有劣势")
+      ],
+      cautions: ["若伤势文本只影响单手或单脚，GM 可以手动放宽攻击或移动惩罚"]
+    });
+  }
+  if (/(眼|目|视力|失明|盲)/.test(text)) {
+    return mechanicalProfile({
+      id: "eye-injury",
+      label: "眼部伤势",
+      summary: "远程攻击和依赖视觉的察觉检定具有劣势。完全失明仍由 GM 手动添加失明状态。",
+      changes: [
+        disadvantage("flags.midi-qol.disadvantage.attack.rwak", "远程武器攻击具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.attack.rsak", "远程法术攻击具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.skill.prc", "察觉检定具有劣势")
+      ],
+      cautions: ["若结果是完全失明，请由 GM 额外添加 Foundry 的“目盲”状态"]
+    });
+  }
+  if (/(骨折|骨裂|断骨|肋骨|脱臼|扭伤|肌腱|韧带|跛|瘸|腿伤|脚伤|足伤)/.test(text)) {
+    return mechanicalProfile({
+      id: "fracture",
+      label: "骨折或行动伤",
+      summary: "移动速度降低 10 尺；敏捷检定和力量检定具有劣势。",
+      changes: [
+        movementChange("walk", -10),
+        movementChange("climb", -10),
+        movementChange("swim", -10),
+        disadvantage("flags.midi-qol.disadvantage.ability.check.dex", "敏捷检定具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.ability.check.str", "力量检定具有劣势")
+      ],
+      cautions: ["如果伤势只影响上肢，GM 可以手动移除移动速度惩罚"]
+    });
+  }
+  if (/(内伤|内出血|脏器|器官|肺|心|肾|肝|胃|腹|胸|脑震荡|震荡|眩晕|昏沉)/.test(text)) {
+    return mechanicalProfile({
+      id: "internal-injury",
+      label: "内伤",
+      summary: "体质豁免和专注豁免具有劣势；不能从本模块自动判断是否需要持续治疗。",
+      changes: [
+        disadvantage("flags.midi-qol.disadvantage.ability.save.con", "体质豁免具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.concentration", "专注豁免具有劣势")
+      ],
+      cautions: ["持续伤害、治疗 DC、是否恶化由 GM 处理"]
+    });
+  }
+  if (/(失血|流血|出血|大出血|撕裂|割裂|开放性|伤口|裂口)/.test(text)) {
+    return mechanicalProfile({
+      id: "bleeding",
+      label: "失血",
+      summary: "体质豁免和专注豁免具有劣势；不自动扣血，避免未经确认的持续伤害误触发。",
+      changes: [
+        disadvantage("flags.midi-qol.disadvantage.ability.save.con", "体质豁免具有劣势"),
+        disadvantage("flags.midi-qol.disadvantage.concentration", "专注豁免具有劣势")
+      ],
+      cautions: ["如需每回合失血扣血，应在真实测试后单独开启 OverTime 规则"]
+    });
+  }
+  if (/(灼伤|烧伤|腐蚀|酸蚀|冻伤|坏死|感染|中毒|脓|溃烂|疾病)/.test(text)) {
+    return mechanicalProfile({
+      id: "systemic-trauma",
+      label: "持续性创伤",
+      summary: "体质豁免具有劣势；治疗和恶化由 GM 裁定。",
+      changes: [
+        disadvantage("flags.midi-qol.disadvantage.ability.save.con", "体质豁免具有劣势")
+      ],
+      cautions: ["感染、毒素、坏死是否造成持续伤害不自动处理"]
+    });
+  }
+  if (/(疤|伤疤|毁容|面容|容貌|恐怖外貌)/.test(text)) {
+    return mechanicalProfile({
+      id: "scar",
+      label: "疤痕或毁容",
+      summary: "不自动惩罚战斗；社交影响由 GM 按场景处理。",
+      cautions: ["若桌面决定影响威吓、游说或欺瞒，请手动添加更具体的效应"]
+    });
+  }
+  return injuryNoMappedMechanics();
+}
+
+function injuryNoMappedMechanics() {
+  return mechanicalProfile({
+    id: "record-only",
+    label: "未识别或仅记录",
+    summary: "没有自动机械效果；仅把随机表结果写入角色效应。",
+    cautions: ["该结果没有命中已规则化关键词，GM 可以按原文手动处理"]
+  });
+}
+
+function mechanicalProfile({ id, label, summary, changes = [], cautions = [] }) {
+  return {
+    id,
+    label,
+    summary,
+    changes: changes.map(({ label: _label, ...change }) => ({ priority: change.priority ?? 20, ...change })),
+    changeLabels: changes.map((change) => change.label ?? change.key),
+    tags: changes.map((change) => change.label ?? change.key),
+    cautions
+  };
+}
+
+function movementChange(kind, value) {
+  return {
+    key: `system.attributes.movement.${kind}`,
+    mode: EFFECT_MODES.ADD,
+    value,
+    label: `${movementLabel(kind)} ${value} 尺`
+  };
+}
+
+function disadvantage(key, label) {
+  return {
+    key,
+    mode: EFFECT_MODES.OVERRIDE,
+    value: 1,
+    label
+  };
+}
+
+function movementLabel(kind) {
+  if (kind === "walk") return "步行速度";
+  if (kind === "climb") return "攀爬速度";
+  if (kind === "swim") return "游泳速度";
+  if (kind === "fly") return "飞行速度";
+  return "移动速度";
+}
+
+function normalizeInjuryText(value) {
+  return String(value ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function selectedInjuryActors() {
   const actors = (canvas?.tokens?.controlled ?? []).map((token) => token.actor).filter(Boolean);
   const byId = new Map();
@@ -254,7 +432,3 @@ function escapeInjuryHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
-
-
-
-
