@@ -158,12 +158,14 @@ async function rollInjury({ actors = [], trigger = "gm", damage = "slashing", no
   const roll = await new Roll("3d6").evaluate({ async: true });
   const rollText = await roll.render();
   const result = table ? findTableResult(table, roll.total) : null;
+  const resultText = result?.text ?? result?.description ?? result?.name ?? "";
+  const mapped = result ? resolveInjuryMechanics(resultText, tableInfo) : injuryNoMappedMechanics();
   const actorNames = actors.length ? actors.map((actor) => escapeInjuryHtml(actor.name)).join("、") : "未指定角色";
   const effectIds = await applyInjuryEffects(actors, { tableInfo, result, rollTotal: roll.total, trigger, note });
   await ChatMessage.create({
     speaker: { alias: "苍梵界跑团房规" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
-    content: `<div class="cfj-sanity-card"><h3>持续伤势：${tableInfo.label}</h3><table><tr><th>目标</th><td>${actorNames}</td></tr><tr><th>触发</th><td>${triggerLabel(trigger)}</td></tr><tr><th>投骰</th><td>${roll.total}</td></tr><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>结果</th><td>${result ? renderTableResult(result) : "未找到对应表格结果；请打开原始 RollTable 手动核对。"}</td></tr><tr><th>角色效应</th><td>${effectIds.length ? `已写入 ${effectIds.length} 个伤势效应` : "未写入；未选择目标、设置关闭或表格结果缺失"}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table>${rollText}<p class="cfj-sanity-note">本结果自动来自随机表。是否需要部位表、治疗、手术或长期适应，由 GM 根据当前场景裁定。</p></div>`
+    content: `<div class="cfj-sanity-card"><h3>持续伤势：${tableInfo.label}</h3><table><tr><th>目标</th><td>${actorNames}</td></tr><tr><th>触发</th><td>${triggerLabel(trigger)}</td></tr><tr><th>投骰</th><td>${roll.total}</td></tr><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>结果</th><td>${result ? renderTableResult(result) : "未找到对应表格结果；请打开原始 RollTable 手动核对。"}</td></tr><tr><th>规则化</th><td>${escapeInjuryHtml(mapped.label)}：${escapeInjuryHtml(mapped.summary)}</td></tr><tr><th>角色效应</th><td>${effectIds.length ? `已写入 ${effectIds.length} 个伤势效应` : "未写入；未选择目标、设置关闭或表格结果缺失"}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table>${rollText}<p class="cfj-sanity-note">本结果自动来自随机表。是否需要部位表、治疗、手术或长期适应，由 GM 根据当前场景裁定。</p></div>`
   });
 }
 
@@ -176,7 +178,7 @@ async function applyInjuryEffects(actors, { tableInfo, result, rollTotal, trigge
   const midiReady = injurySetting("injuryEffectMidiReady", true);
   for (const actor of actors) {
     if (!actor?.createEmbeddedDocuments) continue;
-    const mapped = injurySetting("injuryApplyMappedMechanics", true) ? mapInjuryMechanics(resultText, tableInfo) : injuryNoMappedMechanics();
+    const mapped = resolveInjuryMechanics(resultText, tableInfo);
     const effectData = {
       name: `持续伤势：${tableInfo.label} ${range}`,
       icon: "icons/svg/blood.svg",
@@ -219,6 +221,11 @@ function injuryEffectDescription({ tableInfo, resultText, range, rollTotal, trig
   const changes = mapped?.changeLabels?.length ? mapped.changeLabels.map((line) => `<li>${escapeInjuryHtml(line)}</li>`).join("") : "<li>无自动机械效果；仅记录伤势。</li>";
   const cautions = mapped?.cautions?.length ? `<p><strong>仍需 GM 裁定：</strong>${mapped.cautions.map(escapeInjuryHtml).join("；")}</p>` : "";
   return `<p><strong>持续伤势：${escapeInjuryHtml(tableInfo.label)}</strong></p><table><tr><th>表格</th><td>${escapeInjuryHtml(tableInfo.table)}</td></tr><tr><th>范围</th><td>${escapeInjuryHtml(range)}</td></tr><tr><th>投骰</th><td>${escapeInjuryHtml(rollTotal)}</td></tr><tr><th>触发</th><td>${escapeInjuryHtml(triggerLabel(trigger))}</td></tr><tr><th>结果</th><td>${escapeInjuryHtml(resultText)}</td></tr><tr><th>规则化</th><td>${escapeInjuryHtml(mapped?.label ?? "未映射")}</td></tr>${note ? `<tr><th>备注</th><td>${escapeInjuryHtml(note)}</td></tr>` : ""}</table><p><strong>自动效果：</strong>${escapeInjuryHtml(mapped?.summary ?? "无")}</p><ul>${changes}</ul>${cautions}`;
+}
+
+function resolveInjuryMechanics(resultText, tableInfo) {
+  if (!injurySetting("injuryApplyMappedMechanics", true)) return injuryMechanicsDisabled();
+  return mapInjuryMechanics(resultText, tableInfo);
 }
 
 function mapInjuryMechanics(resultText, tableInfo) {
@@ -326,6 +333,15 @@ function injuryNoMappedMechanics() {
     label: "未识别或仅记录",
     summary: "没有自动机械效果；仅把随机表结果写入角色效应。",
     cautions: ["该结果没有命中已规则化关键词，GM 可以按原文手动处理"]
+  });
+}
+
+function injuryMechanicsDisabled() {
+  return mechanicalProfile({
+    id: "mechanics-disabled",
+    label: "机械效果已关闭",
+    summary: "当前设置只记录伤势，不写入自动机械惩罚。",
+    cautions: ["如需自动减速、劣势或专注惩罚，请在模块设置中开启【持续伤势】自动套用明确机械效果"]
   });
 }
 
