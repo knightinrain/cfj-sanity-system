@@ -70,3 +70,12 @@
   padding-right: 0.5rem;
 }
 
+
+.cf-ride-link-hud-button {
+  color: #d7c48a;
+}
+
+.cf-ride-link-hud-button:hover {
+  color: #fff0b0;
+}
+
