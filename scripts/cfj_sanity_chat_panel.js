@@ -79,8 +79,20 @@ async function renderSanityPanel() {
   });
 }
 
+function panelSetting(key, fallback) {
+  try { return game.settings.get(MODULE_ID, key); } catch (_err) { return fallback; }
+}
+
 function gmPanelContent() {
-  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button><button type="button" data-cfj-injury-action="rules">持续伤势规则</button><button type="button" data-cfj-injury-action="roll">投掷持续伤势</button></div><p class="cfj-sanity-note">玩家会收到被发起后的强制弹窗和判定卡；持续伤势是默认关闭的可选房规，开启后由 GM 手动触发。</p></div>`;
+  const sanity = panelSetting("enableSanityRules", true);
+  const injury = panelSetting("enableInjuryRules", false);
+  const rideable = panelSetting("enableRideableRules", true);
+  const status = (enabled) => enabled ? "已启用" : "已关闭";
+  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p>
+  <section class="cfj-house-rule-section"><h4>理智 <span>${status(sanity)}</span></h4><div class="cfj-sanity-actions">${sanity ? `<button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button>` : `<button type="button" disabled>理智规则已关闭</button>`}</div></section>
+  <section class="cfj-house-rule-section"><h4>持续伤势 <span>${status(injury)}</span></h4><div class="cfj-sanity-actions"><button type="button" data-cfj-injury-action="rules">持续伤势规则</button>${injury ? `<button type="button" data-cfj-injury-action="roll">投掷持续伤势</button>` : `<button type="button" disabled>持续伤势已关闭</button>`}</div></section>
+  <section class="cfj-house-rule-section"><h4>骑乘 <span>${status(rideable)}</span></h4><p class="cfj-sanity-note">骑乘使用 Token HUD 和快捷键：M 骑乘，N 下马。${rideable ? "当前可用。" : "当前已关闭，不显示骑乘 HUD 按钮，也不执行快捷键。"}</p></section>
+  <p class="cfj-sanity-note">每个功能都可在模块设置中单独启用或关闭，设置项按【理智】、【持续伤势】、【骑乘】分区排列。</p></div>`;
 }
 
 function selectedActors() {
@@ -173,6 +185,7 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
+
 
 
 

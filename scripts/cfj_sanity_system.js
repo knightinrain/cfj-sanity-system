@@ -68,14 +68,17 @@ function exposeApi() {
 
 function registerSettings() {
   const register = (key, data) => game.settings.register(MODULE_ID, key, { scope: "world", config: true, ...data });
-  register("defaultDc", { name: "默认 DC", hint: "GM 发起理智检定或豁免时的默认 DC。", type: Number, default: 15, range: { min: 1, max: 40, step: 1 } });
-  register("requireGmRequest", { name: "玩家必须等待 GM 发起", hint: "开启后，玩家不能自行设置 DC；必须由 GM 先发起理智检定或豁免。", type: Boolean, default: true });
-  register("resourceSlot", { name: "理智显示资源栏", hint: "选择把当前/最大理智显示在角色卡哪个资源栏。若该资源栏已有用途，请改用其他栏或选择不写入资源栏。", type: String, choices: { primary: "主资源栏", secondary: "副资源栏", tertiary: "第三资源栏", none: "不写入资源栏" }, default: "primary" });
-  register("autoShortRest", { name: "短休自动处理理智", hint: "短休后自动移除裂解症状，并重新计算理智状态。", type: Boolean, default: true });
-  register("autoLongRest", { name: "长休自动处理理智", hint: "长休后自动恢复 1 点当前理智，移除理智症状，并重新计算理智状态。", type: Boolean, default: true });
-  register("autoSymptoms", { name: "自动生成裂解/崩溃症状", hint: "进入裂解或崩溃时自动抽取并添加对应症状。关闭后只显示理智状态。", type: Boolean, default: true });
-  register("showGmDetail", { name: "显示 GM 明细", hint: "开启后，GM 会收到包含 DC、失败差值、同源、熟练和主动深入的私密明细。", type: Boolean, default: true });
+  register("enableSanityRules", { name: "【理智】启用理智规则", hint: "关闭后，SAN 检定、SAN 豁免、理智损失、理智状态、症状和休息恢复都不会执行。", type: Boolean, default: true });
+  register("defaultDc", { name: "【理智】默认 DC", hint: "GM 发起理智检定或豁免时的默认 DC。", type: Number, default: 15, range: { min: 1, max: 40, step: 1 } });
+  register("requireGmRequest", { name: "【理智】玩家必须等待 GM 发起", hint: "开启后，玩家不能自行设置 DC；必须由 GM 先发起理智检定或豁免。", type: Boolean, default: true });
+  register("resourceSlot", { name: "【理智】显示资源栏", hint: "选择把当前/最大理智显示在角色卡哪个资源栏。若该资源栏已有用途，请改用其他栏或选择不写入资源栏。", type: String, choices: { primary: "主资源栏", secondary: "副资源栏", tertiary: "第三资源栏", none: "不写入资源栏" }, default: "primary" });
+  register("autoShortRest", { name: "【理智】短休自动处理", hint: "短休后自动移除裂解症状，并重新计算理智状态。", type: Boolean, default: true });
+  register("autoLongRest", { name: "【理智】长休自动处理", hint: "长休后自动恢复 1 点当前理智，移除理智症状，并重新计算理智状态。", type: Boolean, default: true });
+  register("autoSymptoms", { name: "【理智】自动生成裂解/崩溃症状", hint: "进入裂解或崩溃时自动抽取并添加对应症状。关闭后只显示理智状态。", type: Boolean, default: true });
+  register("showGmDetail", { name: "【理智】显示 GM 明细", hint: "开启后，GM 会收到包含 DC、失败差值、同源、熟练和主动深入的私密明细。", type: Boolean, default: true });
 }
+
+function sanityEnabled() { return setting("enableSanityRules", true); }
 
 function setting(key, fallback) {
   try {
@@ -102,7 +105,10 @@ function patchAbilityRolls() {
     if (typeof proto[method] !== "function") continue;
     const original = proto[method];
     proto[method] = function patchedSanRoll(ability, ...rest) {
-      if (String(ability).toLowerCase() === "san") return runSanityRoll(this, type);
+      if (String(ability).toLowerCase() === "san") {
+        if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
+        return runSanityRoll(this, type);
+      }
       return original.call(this, ability, ...rest);
     };
   }
@@ -116,7 +122,7 @@ function patchRestFlow() {
     const originalShort = proto.shortRest;
     proto.shortRest = async function patchedShortRest(...args) {
       const result = await originalShort.apply(this, args);
-      if (setting("autoShortRest", true)) await restShort(this);
+      if (sanityEnabled() && setting("autoShortRest", true)) await restShort(this);
       return result;
     };
   }
@@ -124,7 +130,7 @@ function patchRestFlow() {
     const originalLong = proto.longRest;
     proto.longRest = async function patchedLongRest(...args) {
       const result = await originalLong.apply(this, args);
-      if (setting("autoLongRest", true)) {
+      if (sanityEnabled() && setting("autoLongRest", true)) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         await restLong(this);
       }
@@ -221,6 +227,7 @@ function actorFromElement(element) {
 
 
 async function generateSanity(actor) {
+  if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
   const roll = await new Roll("4d6kh3").evaluate({ async: true });
@@ -230,6 +237,7 @@ async function generateSanity(actor) {
 }
 
 async function installActor(actor) {
+  if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
   const flags = getSanity(actor);
@@ -286,6 +294,7 @@ function stateFor(current, max) {
 }
 
 async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false, messageWhisper = null } = {}) {
+  if (!sanityEnabled()) return;
   const flags = getSanity(actor);
   const visible = getVisibleSanity(actor);
   const current = Number(flags.current ?? visible.current ?? actor.system?.abilities?.san?.value ?? 0);
@@ -347,6 +356,7 @@ function symptomDescription(symptom, severity) {
 }
 
 async function runSanityRoll(actor, type = "save") {
+  if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return;
   const flags = getSanity(actor);
@@ -433,6 +443,7 @@ function defaultRollOptions(type) {
 }
 
 function requestDialog() {
+  if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   if (!game.user?.isGM) return ui.notifications.warn("只有 GM 可以发起理智判定。");
   const defaultDc = Number(setting("defaultDc", 15));
   const actors = Array.from(game.users).filter((u) => u.active && u.character).map((u) => ({ user: u, actor: u.character }));
@@ -447,6 +458,7 @@ function requestDialog() {
 }
 
 async function requestForActors(actors, data) {
+  if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   if (!game.user?.isGM) return;
   const skipped = [];
   for (const actor of actors) {
@@ -480,6 +492,7 @@ function requestCardContent(actor, data) {
 }
 
 async function restShort(actor) {
+  if (!sanityEnabled()) return;
   actor = resolveActor(actor);
   if (!actor) return;
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "symptom" && e.getFlag(MODULE_ID, "severity") === "fractured");
@@ -488,6 +501,7 @@ async function restShort(actor) {
 }
 
 async function restLong(actor) {
+  if (!sanityEnabled()) return;
   actor = resolveActor(actor);
   if (!actor) return;
   const flags = getSanity(actor);
@@ -509,6 +523,8 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((c) => map[c] ?? c).join("");
 }
+
+
 
 
 

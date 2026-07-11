@@ -31,25 +31,25 @@ Hooks.once("ready", () => {
 function registerInjurySettings() {
   const register = (key, data) => game.settings.register(CFJ_INJURY_MODULE_ID, key, { scope: "world", config: true, ...data });
   register("enableInjuryRules", {
-    name: "启用持续伤势房规",
+    name: "【持续伤势】启用持续伤势房规",
     hint: "默认关闭。开启后，GM 可以在跑团房规控制台中手动投掷持续伤势表。关闭时，所有伤势按钮只显示规则说明，不产生任何伤势结果。",
     type: Boolean,
     default: false
   });
   register("injuryTriggerCritical", {
-    name: "伤势触发：暴击",
+    name: "【持续伤势】触发：暴击",
     hint: "建议开启。角色受到暴击且该次攻击造成实际伤害时，GM 可以要求投掷对应伤害类型的持续伤势表。",
     type: Boolean,
     default: true
   });
   register("injuryTriggerSevereSave", {
-    name: "伤势触发：造成伤害的豁免严重失败",
+    name: "【持续伤势】触发：造成伤害的豁免严重失败",
     hint: "建议开启。角色在会造成伤害的豁免中严重失败时，GM 可以要求投掷对应伤害类型的持续伤势表。",
     type: Boolean,
     default: true
   });
   register("injurySevereFailBy", {
-    name: "伤势严重失败差值",
+    name: "【持续伤势】严重失败差值",
     hint: "豁免结果低于 DC 多少才算严重失败。建议为 5；若战役更严酷，可改为 10。",
     type: Number,
     default: 5,
@@ -194,4 +194,5 @@ function escapeInjuryHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
+
 

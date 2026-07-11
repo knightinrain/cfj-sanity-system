@@ -79,3 +79,22 @@
   color: #fff0b0;
 }
 
+
+.cfj-house-rule-section {
+  border: 1px solid rgba(143, 31, 53, 0.35);
+  margin: 0.5rem 0;
+  padding: 0.45rem 0.55rem;
+}
+
+.cfj-house-rule-section h4 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.cfj-house-rule-section h4 span {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}

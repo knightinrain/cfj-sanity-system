@@ -77,6 +77,8 @@ function moduleSetting(key, fallback) {
   }
 }
 
+function rideableEnabled() { return moduleSetting("enableRideableRules", true); }
+
 function tokenConfig(tokenDoc) {
   return tokenDoc?.getFlag(MODULE_ID, FLAG_CONFIG) ?? {};
 }
@@ -111,7 +113,9 @@ function tokenSizeRank(tokenDoc) {
 function validMountSize(riderDoc, mountDoc) {
   if (!moduleSetting("enforceSizeRestriction", true)) return true;
   const requiredDifference = Number(moduleSetting("requiredSizeDifference", 1) ?? 1);
-  return tokenSizeRank(mountDoc) - tokenSizeRank(riderDoc) === requiredDifference;
+  const difference = tokenSizeRank(mountDoc) - tokenSizeRank(riderDoc);
+  const mode = moduleSetting("sizeRuleMode", "atLeast");
+  return mode === "exact" ? difference === requiredDifference : difference >= requiredDifference;
 }
 function distanceBetween(a, b) {
   const ac = tokenCenter(a);
@@ -125,6 +129,7 @@ function sameDisposition(a, b) {
 }
 
 function canMount(riderDoc, mountDoc, options = {}) {
+  if (!rideableEnabled()) return { ok: false, reason: "骑乘规则当前已关闭。" };
   if (!riderDoc || !mountDoc) return { ok: false, reason: "缺少骑手或坐骑。" };
   if (riderDoc.id === mountDoc.id) return { ok: false, reason: "Token 不能骑乘自己。" };
   if (sceneOf(riderDoc)?.id !== sceneOf(mountDoc)?.id) return { ok: false, reason: "骑手和坐骑必须在同一个场景中。" };
@@ -281,6 +286,7 @@ async function removeRideEffects(riderDoc) {
 }
 
 async function syncRiderToMount(riderDoc, mountDoc, index = 0, count = 1, options = {}) {
+  if (!rideableEnabled()) return false;
   if (!riderDoc || !mountDoc) return false;
 
   const mountFlag = getMountFlag(riderDoc) ?? {};
@@ -319,6 +325,7 @@ async function syncRiderToMount(riderDoc, mountDoc, index = 0, count = 1, option
 }
 
 async function syncMount(mountDoc) {
+  if (!rideableEnabled()) return;
   const riders = mountedRiders(mountDoc);
   for (let i = 0; i < riders.length; i++) {
     await syncRiderToMount(riders[i], mountDoc, i, riders.length);
@@ -326,6 +333,7 @@ async function syncMount(mountDoc) {
 }
 
 function scheduleMountSync(mountDoc) {
+  if (!rideableEnabled()) return;
   const scene = sceneOf(mountDoc);
   if (!scene || !mountDoc?.id) return;
   const key = `${scene.id}.${mountDoc.id}`;
@@ -384,6 +392,7 @@ async function mountRider(riderDoc, mountDoc, options = {}) {
 }
 
 async function dismountRider(riderDoc, options = {}) {
+  if (!rideableEnabled()) return false;
   const mountFlag = getMountFlag(riderDoc);
   if (!mountFlag?.mountId) {
     ui.notifications?.warn(`${riderDoc?.name ?? "这个 Token"} 当前没有骑乘。`);
@@ -486,6 +495,7 @@ async function setTokenConfig(tokenDoc, config = {}) {
 }
 
 async function clearScene(scene = currentScene()) {
+  if (!rideableEnabled()) return;
   if (!scene) return;
   for (const tokenDoc of scene.tokens) {
     if (getMountFlag(tokenDoc)) {
@@ -499,6 +509,7 @@ async function clearScene(scene = currentScene()) {
 }
 
 async function repairScene(scene = currentScene()) {
+  if (!rideableEnabled()) return;
   if (!scene) return;
   for (const tokenDoc of scene.tokens) {
     const mountFlag = getMountFlag(tokenDoc);
@@ -515,6 +526,7 @@ async function repairScene(scene = currentScene()) {
 }
 
 async function followToken(followerDoc, targetDoc, options = {}) {
+  if (!rideableEnabled()) return false;
   if (!followerDoc || !targetDoc || followerDoc.id === targetDoc.id) return false;
   await followerDoc.setFlag(MODULE_ID, FLAG_FOLLOW, {
     targetId: targetDoc.id,
@@ -531,6 +543,7 @@ async function stopFollowing(followerDoc) {
 }
 
 async function syncFollowers(targetDoc) {
+  if (!rideableEnabled()) return;
   if (!moduleSetting("enableFollowing", false)) return;
   const scene = sceneOf(targetDoc);
   const followers = scene.tokens.filter(tokenDoc => tokenDoc.getFlag(MODULE_ID, FLAG_FOLLOW)?.targetId === targetDoc.id);
@@ -546,6 +559,7 @@ async function syncFollowers(targetDoc) {
 }
 
 async function handleIndependentRiderMovement(riderDoc, changes, options) {
+  if (!rideableEnabled()) return;
   const mountFlag = getMountFlag(riderDoc);
   if (!mountFlag?.mountId) return;
   const scene = sceneOf(riderDoc);
@@ -609,23 +623,24 @@ function addTokenHudButton(html, title, iconClass, onClick) {
 
 function registerSettings() {
   const register = (key, data) => game.settings.register(MODULE_ID, key, { scope: "world", config: true, ...data });
-  register("rideableByDefault", { name: "骑乘：默认所有 Token 可作为坐骑", hint: "关闭后，需要用 API 或 Token 配置单独标记可骑乘。", type: Boolean, default: true });
-  register("enforceSizeRestriction", { name: "骑乘：强制体型限制", hint: "开启后，骑手只能骑乘符合体型差要求的 Token。默认开启。", type: Boolean, default: true });
-  register("requiredSizeDifference", { name: "骑乘：坐骑至少大几个体型", hint: "1 表示坐骑至少比骑手大一个体型。", type: Number, default: 1, range: { min: 0, max: 5, step: 1 } });
-  register("sizeRuleMode", { name: "骑乘：体型规则模式", hint: "至少模式更宽松；精确模式要求体型差刚好等于上面的数值。", type: String, choices: { atLeast: "至少达到体型差", exact: "必须刚好等于体型差" }, default: "atLeast" });
-  register("maxRiders", { name: "骑乘：每个坐骑最多骑手数", hint: "0 表示不限制；默认 2。", type: Number, default: 2, range: { min: 0, max: 8, step: 1 } });
-  register("riderPlacement", { name: "骑乘：骑手站位", type: String, choices: { center: "居中", row: "横排", circle: "环绕" }, default: "circle" });
-  register("riderElevationOffset", { name: "骑乘：高度加值", hint: "骑手高度 = 坐骑高度 + 此数值 + 额外高度。", type: Number, default: 1, range: { min: 0, max: 20, step: 1 } });
-  register("ridersCanMoveFreely", { name: "骑乘：默认允许骑手自由移动", hint: "开启后，骑手可在坐骑上调整相对位置，坐骑移动时保留偏移。", type: Boolean, default: false });
-  register("riderMovement", { name: "骑乘：骑手主动移动时", type: String, choices: { free: "记录为自由偏移", prevent: "拉回坐骑位置", dismount: "自动下马", moveMount: "推动坐骑移动" }, default: "free" });
-  register("syncRotation", { name: "骑乘：同步旋转", type: Boolean, default: false });
-  register("mountingDistance", { name: "骑乘：距离限制", hint: "0 表示 GM 不受距离限制；非 GM 会检查距离。", type: Number, default: 0, range: { min: 0, max: 120, step: 5 } });
-  register("preventEnemyRiding", { name: "骑乘：禁止敌对 Token 骑乘", type: Boolean, default: false });
-  register("applyMountedEffect", { name: "骑乘：自动添加骑乘效应", type: Boolean, default: true });
-  register("applyGrappledEffect", { name: "骑乘：擒抱模式自动添加效应", type: Boolean, default: true });
-  register("riderScale", { name: "骑乘：骑手缩放倍率", type: Number, default: 1, range: { min: 0.25, max: 2, step: 0.05 } });
-  register("enableFollowing", { name: "骑乘：启用跟随功能", type: Boolean, default: false });
-  register("followDistance", { name: "骑乘：跟随距离", type: Number, default: 5, range: { min: 0, max: 120, step: 5 } });
+  register("enableRideableRules", { name: "【骑乘】启用骑乘房规", hint: "关闭后，骑乘 HUD、快捷键、跟随同步和 Rideable 兼容 API 都不会执行骑乘操作。", type: Boolean, default: true });
+  register("rideableByDefault", { name: "【骑乘】默认所有 Token 可作为坐骑", hint: "关闭后，需要用 API 或 Token 配置单独标记可骑乘。", type: Boolean, default: true });
+  register("enforceSizeRestriction", { name: "【骑乘】强制体型限制", hint: "开启后，骑手只能骑乘符合体型差要求的 Token。默认开启。", type: Boolean, default: true });
+  register("requiredSizeDifference", { name: "【骑乘】坐骑至少大几个体型", hint: "1 表示坐骑至少比骑手大一个体型。", type: Number, default: 1, range: { min: 0, max: 5, step: 1 } });
+  register("sizeRuleMode", { name: "【骑乘】体型规则模式", hint: "至少模式更宽松；精确模式要求体型差刚好等于上面的数值。", type: String, choices: { atLeast: "至少达到体型差", exact: "必须刚好等于体型差" }, default: "atLeast" });
+  register("maxRiders", { name: "【骑乘】每个坐骑最多骑手数", hint: "0 表示不限制；默认 2。", type: Number, default: 2, range: { min: 0, max: 8, step: 1 } });
+  register("riderPlacement", { name: "【骑乘】骑手站位", type: String, choices: { center: "居中", row: "横排", circle: "环绕" }, default: "circle" });
+  register("riderElevationOffset", { name: "【骑乘】高度加值", hint: "骑手高度 = 坐骑高度 + 此数值 + 额外高度。", type: Number, default: 1, range: { min: 0, max: 20, step: 1 } });
+  register("ridersCanMoveFreely", { name: "【骑乘】默认允许骑手自由移动", hint: "开启后，骑手可在坐骑上调整相对位置，坐骑移动时保留偏移。", type: Boolean, default: false });
+  register("riderMovement", { name: "【骑乘】骑手主动移动时", type: String, choices: { free: "记录为自由偏移", prevent: "拉回坐骑位置", dismount: "自动下马", moveMount: "推动坐骑移动" }, default: "free" });
+  register("syncRotation", { name: "【骑乘】同步旋转", type: Boolean, default: false });
+  register("mountingDistance", { name: "【骑乘】距离限制", hint: "0 表示 GM 不受距离限制；非 GM 会检查距离。", type: Number, default: 0, range: { min: 0, max: 120, step: 5 } });
+  register("preventEnemyRiding", { name: "【骑乘】禁止敌对 Token 骑乘", type: Boolean, default: false });
+  register("applyMountedEffect", { name: "【骑乘】自动添加骑乘效应", type: Boolean, default: true });
+  register("applyGrappledEffect", { name: "【骑乘】擒抱模式自动添加效应", type: Boolean, default: true });
+  register("riderScale", { name: "【骑乘】骑手缩放倍率", type: Number, default: 1, range: { min: 0.25, max: 2, step: 0.05 } });
+  register("enableFollowing", { name: "【骑乘】启用跟随功能", type: Boolean, default: false });
+  register("followDistance", { name: "【骑乘】跟随距离", type: Number, default: 5, range: { min: 0, max: 120, step: 5 } });
 }
 function activateRideLinkApi() {
   const api = {
@@ -676,14 +691,14 @@ else Hooks.once("ready", activateRideLinkApi);
 
 Hooks.on("renderTokenHUD", (hud, html) => {
   const tokenDoc = hud.object?.document;
-  if (!tokenDoc || !game.user?.isGM) return;
+  if (!tokenDoc || !game.user?.isGM || !rideableEnabled()) return;
   addTokenHudButton(html, "让选中的 Token 骑乘此 Token", "fas fa-horse", () => mountSelectedOnHudToken(tokenDoc));
   addTokenHudButton(html, "让此 Token 下马", "fas fa-unlink", () => dismountRider(tokenDoc));
   addTokenHudButton(html, "移除此 Token 上的全部骑手", "fas fa-users-slash", () => unmountAllRiders(tokenDoc));
 });
 
 Hooks.on("updateToken", async (tokenDoc, changes, options) => {
-  if (options?.[MODULE_ID]?.syncing || options?.[MODULE_ID]?.dismounting || options?.[MODULE_ID]?.following || options?.[MODULE_ID]?.movingMount) return;
+  if (!rideableEnabled() || options?.[MODULE_ID]?.syncing || options?.[MODULE_ID]?.dismounting || options?.[MODULE_ID]?.following || options?.[MODULE_ID]?.movingMount) return;
   const changedPosition = "x" in changes || "y" in changes || "elevation" in changes || "rotation" in changes;
   if (!changedPosition) return;
 
@@ -711,6 +726,7 @@ Hooks.on("deleteToken", async tokenDoc => {
 });
 
 Hooks.on("canvasReady", () => {
+  if (!rideableEnabled()) return;
   for (const tokenDoc of canvas.scene?.tokens ?? []) {
     if (getRiderIds(tokenDoc).length) scheduleMountSync(tokenDoc);
   }
@@ -720,6 +736,7 @@ window.addEventListener("keydown", event => {
   if (event.defaultPrevented || event.repeat) return;
   const tag = document.activeElement?.tagName?.toLowerCase();
   if (["input", "textarea", "select"].includes(tag)) return;
+  if (!rideableEnabled()) return;
   if (event.key?.toLowerCase() === "m") {
     event.preventDefault();
     mountSelectedToTarget({ hovered: true });
@@ -729,5 +746,8 @@ window.addEventListener("keydown", event => {
     dismountSelected();
   }
 });
+
+
+
 
 
