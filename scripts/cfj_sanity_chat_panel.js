@@ -41,7 +41,8 @@ function installSanityChatButton(attempt = 0) {
   window.setTimeout(() => {
     const existing = document.getElementById(CHAT_BUTTON_ID);
     if (existing) {
-      if (!isElementVisible(existing)) installSanityFallbackButton();
+      if (isElementVisible(existing)) removeSanityFallbackButton();
+      else installSanityFallbackButton();
       return;
     }
     const mount = findSanityChatButtonMount();
@@ -80,7 +81,11 @@ function findSanityChatButtonMount() {
 function ensureSanityEntryVisible() {
   if (!game.user?.isGM) return;
   const chatButton = document.getElementById(CHAT_BUTTON_ID);
-  if (!chatButton || !isElementVisible(chatButton)) installSanityFallbackButton();
+  if (chatButton && isElementVisible(chatButton)) {
+    removeSanityFallbackButton();
+    return;
+  }
+  installSanityFallbackButton();
 }
 
 function isElementVisible(element) {
@@ -176,6 +181,30 @@ function exposeHouseRulesApi() {
       fallbackButtonVisible: isElementVisible(document.getElementById(CHAT_FALLBACK_BUTTON_ID)),
       hasChat: Boolean(document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab=\'chat\'], [data-tab=\'chat\']"))
     })
+  };
+}
+
+function diagnoseHouseRulesEntry() {
+  const chatButton = document.getElementById(CHAT_BUTTON_ID);
+  const fallbackButton = document.getElementById(CHAT_FALLBACK_BUTTON_ID);
+  const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat']");
+  const rectInfo = (element) => {
+    const rect = element?.getBoundingClientRect?.();
+    return rect ? { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) } : null;
+  };
+  return {
+    version: game.modules.get(MODULE_ID)?.version,
+    isGM: game.user?.isGM,
+    hasChat: Boolean(chat),
+    hasChatButton: Boolean(chatButton),
+    chatButtonVisible: isElementVisible(chatButton),
+    chatButtonRect: rectInfo(chatButton),
+    hasFallbackButton: Boolean(fallbackButton),
+    fallbackButtonVisible: isElementVisible(fallbackButton),
+    fallbackButtonRect: rectInfo(fallbackButton),
+    hasChatForm: Boolean(chat?.querySelector?.("#chat-form, form.chat-form, textarea[name='content']")),
+    hasDiceTray: Boolean(chat?.querySelector?.("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']")),
+    commandExamples: CHAT_COMMANDS
   };
 }
 

@@ -102,7 +102,7 @@
 .cfj-sanity-floating-entry {
   position: fixed;
   top: 5.75rem;
-  right: 0.75rem;
+  right: 4.25rem;
   z-index: 10000;
   width: 10rem;
   pointer-events: auto;
