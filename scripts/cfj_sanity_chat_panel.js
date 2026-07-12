@@ -15,6 +15,9 @@ Hooks.once("ready", () => {
   installSanityChatDomCommand();
   installSanityChatActions();
   installSanityChatButton();
+  window.setTimeout(() => {
+    if (!document.getElementById(CHAT_BUTTON_ID)) installSanityFallbackButton();
+  }, 4500);
   exposeHouseRulesApi();
   console.log(`${MODULE_ID} | chat panel ready`);
 });
@@ -103,7 +106,7 @@ function installSanityChatDomCommand() {
 
 function installSanityFallbackButton() {
   if (!game.user?.isGM || document.getElementById(CHAT_FALLBACK_BUTTON_ID)) return;
-  const host = document.querySelector("#ui-right, #sidebar") ?? document.body;
+  const host = document.body;
   const row = document.createElement("div");
   row.id = CHAT_FALLBACK_BUTTON_ID;
   row.className = "cfj-sanity-floating-entry";

@@ -101,10 +101,11 @@
 
 .cfj-sanity-floating-entry {
   position: fixed;
-  right: 1rem;
-  bottom: 7.25rem;
-  z-index: 100;
+  top: 5.75rem;
+  right: 0.75rem;
+  z-index: 10000;
   width: 10rem;
+  pointer-events: auto;
 }
 
 .cfj-sanity-floating-entry button {
