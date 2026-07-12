@@ -29,22 +29,38 @@ function removeExternalSanityTool(controls) {
   delete tokenControls.tools["cfj-sanity-request"];
 }
 
-function installSanityChatButton() {
+function installSanityChatButton(attempt = 0) {
   if (!game.user?.isGM) return;
-  setTimeout(() => {
+  window.setTimeout(() => {
     if (document.getElementById(CHAT_BUTTON_ID)) return;
-    const chat = document.querySelector("#chat, #sidebar #chat, [data-tab='chat']");
-    if (!chat) return;
-    const form = chat.querySelector("#chat-form, form.chat-form, textarea[name='content']")?.closest?.("form") ?? chat.querySelector("textarea")?.closest?.("form");
-    if (!form?.parentElement) return;
+    const mount = findSanityChatButtonMount();
+    if (!mount) {
+      if (attempt < 20) installSanityChatButton(attempt + 1);
+      else console.warn(`${MODULE_ID} | 找不到聊天框按钮挂载点，可临时在聊天框输入 /理智 打开控制台`);
+      return;
+    }
     const row = document.createElement("div");
     row.id = CHAT_BUTTON_ID;
     row.className = "cfj-sanity-chat-entry";
-    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel"><i class="fas fa-dice-d20"></i> 跑团房规</button>`;
-    form.parentElement.insertBefore(row, form);
-  }, 50);
+    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="打开苍梵界跑团房规控制台"><i class="fas fa-dice-d20"></i> 跑团房规</button>`;
+    mount.parent.insertBefore(row, mount.before ?? null);
+  }, 100 + attempt * 150);
 }
 
+function findSanityChatButtonMount() {
+  const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat']");
+  if (!chat) return null;
+  const form = chat.querySelector("#chat-form, form.chat-form, textarea[name='content']")?.closest?.("form") ?? chat.querySelector("textarea")?.closest?.("form");
+  if (form?.parentElement) return { parent: form.parentElement, before: form };
+  const textarea = chat.querySelector("textarea, [contenteditable='true']");
+  const inputBlock = textarea?.closest?.("form, .chat-form, .chat-input, .message-input, .message-content, .editor") ?? textarea?.parentElement;
+  if (inputBlock?.parentElement) return { parent: inputBlock.parentElement, before: inputBlock };
+  const diceTray = chat.querySelector("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']");
+  if (diceTray?.parentElement) return { parent: diceTray.parentElement, before: diceTray };
+  const controls = chat.querySelector("#chat-controls, .chat-controls, footer, .sidebar-footer");
+  if (controls?.parentElement) return { parent: controls.parentElement, before: controls };
+  return chat ? { parent: chat, before: null } : null;
+}
 function installSanityChatCommand() {
   Hooks.on("preCreateChatMessage", (message, data, _options, userId) => {
     if (userId !== game.user.id) return;
