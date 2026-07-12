@@ -16,7 +16,7 @@ Hooks.once("ready", () => {
   installSanityChatActions();
   installSanityChatButton();
   window.setTimeout(() => {
-    if (!document.getElementById(CHAT_BUTTON_ID)) installSanityFallbackButton();
+    ensureSanityEntryVisible();
   }, 4500);
   exposeHouseRulesApi();
   console.log(`${MODULE_ID} | chat panel ready`);
@@ -39,7 +39,11 @@ function removeExternalSanityTool(controls) {
 function installSanityChatButton(attempt = 0) {
   if (!game.user?.isGM) return;
   window.setTimeout(() => {
-    if (document.getElementById(CHAT_BUTTON_ID)) return;
+    const existing = document.getElementById(CHAT_BUTTON_ID);
+    if (existing) {
+      if (!isElementVisible(existing)) installSanityFallbackButton();
+      return;
+    }
     const mount = findSanityChatButtonMount();
     if (!mount) {
       if (attempt < 20) installSanityChatButton(attempt + 1);
@@ -54,6 +58,7 @@ function installSanityChatButton(attempt = 0) {
     row.className = "cfj-sanity-chat-entry";
     row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="\u6253\u5f00\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0"><i class="fas fa-dice-d20"></i> \u8dd1\u56e2\u623f\u89c4</button>`;
     mount.parent.insertBefore(row, mount.before ?? null);
+    window.setTimeout(ensureSanityEntryVisible, 250);
   }, 100 + attempt * 150);
 }
 
@@ -69,8 +74,24 @@ function findSanityChatButtonMount() {
   if (diceTray?.parentElement) return { parent: diceTray.parentElement, before: diceTray };
   const controls = chat.querySelector("#chat-controls, .chat-controls, footer, .sidebar-footer");
   if (controls?.parentElement) return { parent: controls.parentElement, before: controls };
-  return chat ? { parent: chat, before: null } : null;
+  return null;
 }
+
+function ensureSanityEntryVisible() {
+  if (!game.user?.isGM) return;
+  const chatButton = document.getElementById(CHAT_BUTTON_ID);
+  if (!chatButton || !isElementVisible(chatButton)) installSanityFallbackButton();
+}
+
+function isElementVisible(element) {
+  if (!element?.isConnected) return false;
+  const rect = element.getBoundingClientRect?.();
+  if (!rect || rect.width < 8 || rect.height < 8) return false;
+  const style = window.getComputedStyle?.(element);
+  if (!style || style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+  return rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+}
+
 function installSanityChatCommand() {
   Hooks.on("preCreateChatMessage", (message, data, _options, userId) => {
     if (userId !== game.user.id) return;
@@ -145,7 +166,16 @@ function exposeHouseRulesApi() {
     installButton: installSanityChatButton,
     installFallbackButton: installSanityFallbackButton,
     requestSanity: requestDialogFromChat,
-    setupSanity: setupActorDialog
+    setupSanity: setupActorDialog,
+    diagnose: () => ({
+      version: game.modules.get(MODULE_ID)?.version,
+      isGM: game.user?.isGM,
+      hasChatButton: Boolean(document.getElementById(CHAT_BUTTON_ID)),
+      chatButtonVisible: isElementVisible(document.getElementById(CHAT_BUTTON_ID)),
+      hasFallbackButton: Boolean(document.getElementById(CHAT_FALLBACK_BUTTON_ID)),
+      fallbackButtonVisible: isElementVisible(document.getElementById(CHAT_FALLBACK_BUTTON_ID)),
+      hasChat: Boolean(document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab=\'chat\'], [data-tab=\'chat\']"))
+    })
   };
 }
 
