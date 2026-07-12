@@ -1,41 +1,41 @@
 {
-    "id":  "cfj-sanity-system",
-    "name":  "cfj-sanity-system",
-    "type":  "module",
-    "title":  "苍梵界跑团房规",
-    "description":  "苍梵界 DND5e 跑团房规模块：理智、持续伤势、骑乘/下马/跟随 Token 工具。持续伤势可自动掷表、写入角色效应，并对已规则化伤势套用 DAE/Midi 可读取效果；GM 聊天卡会显示本次规则化结果；聊天区按钮会兼容常见骰子栏布局。",
-    "version":  "0.2.5",
-    "url":  "https://github.com/knightinrain/cfj-sanity-system",
-    "manifest":  "https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.json",
-    "download":  "https://github.com/knightinrain/cfj-sanity-system/archive/refs/heads/main.zip",
-    "authors":  [
-                    {
-                        "name":  "Codex for Cangfanjie"
-                    }
-                ],
-    "compatibility":  {
-                          "minimum":  "12",
-                          "verified":  "13"
-                      },
-    "relationships":  {
-                          "systems":  [
-                                          {
-                                              "id":  "dnd5e",
-                                              "type":  "system",
-                                              "compatibility":  {
-                                                                    "minimum":  "5.0",
-                                                                    "verified":  "5.2.5"
-                                                                }
-                                          }
-                                      ]
-                      },
-    "esmodules":  [
-                      "scripts/cfj_sanity_system.js",
-                      "scripts/cfj_sanity_chat_panel.js",
-                      "scripts/cfj_injury_system.js",
-                      "scripts/cfj_rideable_system.js"
-                  ],
-    "styles":  [
-                   "styles/cfj_sanity_system.css"
-               ]
+  "id": "cfj-sanity-system",
+  "name": "cfj-sanity-system",
+  "type": "module",
+  "title": "苍梵界跑团房规",
+  "description": "苍梵界 DND5e 跑团房规模块：理智、持续伤势、骑乘/下马/跟随 Token 工具。持续伤势可自动掷表、写入角色效应，并对已规则化伤势套用 DAE/Midi 可读取效果；GM 聊天卡会显示本次规则化结果；聊天区按钮会兼容常见骰子栏布局。",
+  "version": "0.2.6",
+  "url": "https://github.com/knightinrain/cfj-sanity-system",
+  "manifest": "https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.json",
+  "download": "https://github.com/knightinrain/cfj-sanity-system/archive/refs/heads/main.zip",
+  "authors": [
+    {
+      "name": "Codex for Cangfanjie"
+    }
+  ],
+  "compatibility": {
+    "minimum": "12",
+    "verified": "13"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "5.0",
+          "verified": "5.2.5"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/cfj_sanity_system.js",
+    "scripts/cfj_sanity_chat_panel.js",
+    "scripts/cfj_injury_system.js",
+    "scripts/cfj_rideable_system.js"
+  ],
+  "styles": [
+    "styles/cfj_sanity_system.css"
+  ]
 }

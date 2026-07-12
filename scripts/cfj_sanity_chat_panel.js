@@ -2,6 +2,8 @@ const MODULE_ID = "cfj-sanity-system";
 const FLAG_SCOPE = "world";
 const SAN_FLAG = "sanity";
 const CHAT_BUTTON_ID = "cfj-sanity-chat-entry";
+const CHAT_FALLBACK_BUTTON_ID = "cfj-sanity-floating-entry";
+const CHAT_COMMANDS = ["/\u7406\u667a", "/\u7406\u667a\u7cfb\u7edf", "/san", "/sanity"];
 
 Hooks.once("init", () => {
   Hooks.on("getSceneControlButtons", removeExternalSanityTool);
@@ -10,8 +12,10 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   Hooks.on("getSceneControlButtons", removeExternalSanityTool);
   installSanityChatCommand();
+  installSanityChatDomCommand();
   installSanityChatActions();
   installSanityChatButton();
+  exposeHouseRulesApi();
   console.log(`${MODULE_ID} | chat panel ready`);
 });
 
@@ -36,13 +40,16 @@ function installSanityChatButton(attempt = 0) {
     const mount = findSanityChatButtonMount();
     if (!mount) {
       if (attempt < 20) installSanityChatButton(attempt + 1);
-      else console.warn(`${MODULE_ID} | 找不到聊天框按钮挂载点，可临时在聊天框输入 /理智 打开控制台`);
+      else {
+        console.warn(`${MODULE_ID} | \u627e\u4e0d\u5230\u804a\u5929\u6846\u6309\u94ae\u6302\u8f7d\u70b9\uff0c\u6539\u7528 GM \u5907\u7528\u5165\u53e3\u3002\u4e5f\u53ef\u4ee5\u5728\u804a\u5929\u6846\u8f93\u5165 /\u7406\u667a \u6253\u5f00\u63a7\u5236\u53f0\u3002`);
+        installSanityFallbackButton();
+      }
       return;
     }
     const row = document.createElement("div");
     row.id = CHAT_BUTTON_ID;
     row.className = "cfj-sanity-chat-entry";
-    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="打开苍梵界跑团房规控制台"><i class="fas fa-dice-d20"></i> 跑团房规</button>`;
+    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="\u6253\u5f00\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0"><i class="fas fa-dice-d20"></i> \u8dd1\u56e2\u623f\u89c4</button>`;
     mount.parent.insertBefore(row, mount.before ?? null);
   }, 100 + attempt * 150);
 }
@@ -65,11 +72,78 @@ function installSanityChatCommand() {
   Hooks.on("preCreateChatMessage", (message, data, _options, userId) => {
     if (userId !== game.user.id) return;
     const content = String(data?.content ?? message?.content ?? "").trim();
-    if (!["/理智", "/理智系统", "/san", "/sanity"].includes(content.toLowerCase())) return;
-    if (!game.user?.isGM) ui.notifications.warn("苍梵界跑团房规控制台只有 GM 可以打开。等待 GM 发起理智判定后，玩家会收到专用判定弹窗和判定卡。");
-    else renderSanityPanel();
-    return false;
+    if (!isSanityChatCommand(content)) return;
+    return openPanelFromCommand();
   });
+}
+
+function installSanityChatDomCommand() {
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    const input = event.target?.closest?.("textarea, input[type='text'], [contenteditable='true']");
+    if (!input || !isChatInput(input) || !isSanityChatCommand(getInputValue(input))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    clearInputValue(input);
+    openPanelFromCommand();
+  }, true);
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target?.closest?.("form");
+    const input = form?.querySelector?.("textarea, input[type='text'], [contenteditable='true']");
+    if (!input || !isChatInput(input) || !isSanityChatCommand(getInputValue(input))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    clearInputValue(input);
+    openPanelFromCommand();
+  }, true);
+}
+
+function installSanityFallbackButton() {
+  if (!game.user?.isGM || document.getElementById(CHAT_FALLBACK_BUTTON_ID)) return;
+  const host = document.querySelector("#ui-right, #sidebar") ?? document.body;
+  const row = document.createElement("div");
+  row.id = CHAT_FALLBACK_BUTTON_ID;
+  row.className = "cfj-sanity-floating-entry";
+  row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="\u6253\u5f00\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0"><i class="fas fa-dice-d20"></i> \u8dd1\u56e2\u623f\u89c4</button>`;
+  host.appendChild(row);
+}
+
+function isSanityChatCommand(value) {
+  return CHAT_COMMANDS.includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isChatInput(input) {
+  return Boolean(input.closest?.("#chat, #sidebar, [data-tab='chat'], #ui-right"));
+}
+
+function getInputValue(input) {
+  return "value" in input ? input.value : input.textContent;
+}
+
+function clearInputValue(input) {
+  if ("value" in input) input.value = "";
+  else input.textContent = "";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function openPanelFromCommand() {
+  if (!game.user?.isGM) ui.notifications.warn("\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0\u53ea\u6709 GM \u53ef\u4ee5\u6253\u5f00\u3002\u7b49\u5f85 GM \u53d1\u8d77\u7406\u667a\u5224\u5b9a\u540e\uff0c\u73a9\u5bb6\u4f1a\u6536\u5230\u4e13\u7528\u5224\u5b9a\u5f39\u7a97\u548c\u5224\u5b9a\u5361\u3002");
+  else renderSanityPanel();
+  return false;
+}
+
+function exposeHouseRulesApi() {
+  game.cfjHouseRules = {
+    ...(game.cfjHouseRules ?? {}),
+    openPanel: renderSanityPanel,
+    installButton: installSanityChatButton,
+    installFallbackButton: installSanityFallbackButton,
+    requestSanity: requestDialogFromChat,
+    setupSanity: setupActorDialog
+  };
 }
 
 function installSanityChatActions() {
