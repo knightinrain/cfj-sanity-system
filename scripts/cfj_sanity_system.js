@@ -285,11 +285,13 @@ async function setSanity(actor, current, max) {
 }
 
 function stateFor(current, max) {
-  const loss = Math.max(0, Number(max || 0) - Number(current || 0));
-  if (current <= 0 || loss >= 11) return "collapsed";
-  if (loss >= 8) return "fractured";
-  if (loss >= 5) return "unbalanced";
-  if (loss >= 2) return "shaken";
+  current = Math.max(0, Number(current || 0));
+  max = Math.max(1, Number(max || 1));
+  const lossRatio = Math.max(0, Math.min(1, (max - current) / max));
+  if (current <= 0 || lossRatio >= 0.8) return "collapsed";
+  if (lossRatio >= 0.55) return "fractured";
+  if (lossRatio >= 0.35) return "unbalanced";
+  if (lossRatio >= 0.16) return "shaken";
   return "stable";
 }
 
@@ -301,26 +303,27 @@ async function refreshSanityState(actor, { previousState = null, forceState = fa
   const max = Number(flags.max ?? visible.max ?? actor.system?.abilities?.san?.value ?? 1);
   const state = stateFor(current, max);
   const loss = Math.max(0, max - current);
-  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, state, stateText: STATES[state].label });
-  await syncStateEffect(actor, state, current, max, loss);
+  const lossRatio = max > 0 ? loss / max : 0;
+  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, lossRatio, state, stateText: STATES[state].label });
+  await syncStateEffect(actor, state, current, max, loss, lossRatio);
   const shouldAddSymptom = setting("autoSymptoms", true) && !suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState);
   if (shouldAddSymptom) await addSymptom(actor, state, { messageWhisper });
 }
 
-async function syncStateEffect(actor, state, current, max, loss) {
+async function syncStateEffect(actor, state, current, max, loss, lossRatio = max > 0 ? loss / max : 0) {
   const stateStatuses = Object.values(STATES).map((s) => s.status);
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "state" || [...(e.statuses ?? [])].some((s) => stateStatuses.includes(s)));
   if (remove.length) await actor.deleteEmbeddedDocuments("ActiveEffect", remove.map((e) => e.id));
   if (state === "stable") return;
   const data = STATES[state];
   await actor.createEmbeddedDocuments("ActiveEffect", [{
-    name: `${data.label} | ${current}/${max} | ${data.rule}`,
+    name: `${data.label} | ${current}/${max} | \u635f\u5931${Math.round(lossRatio * 100)}% | ${data.rule}`,
     icon: "icons/svg/terror.svg",
     origin: actor.uuid,
     disabled: false,
     statuses: [data.status],
-    description: `<p><strong>${data.label} (${current}/${max})</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
-    flags: { [MODULE_ID]: { type: "state", state, current, max, loss } }
+    description: `<p><strong>${data.label} (${current}/${max}\uff0c\u5df2\u635f\u5931 ${Math.round(lossRatio * 100)}%)</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
+    flags: { [MODULE_ID]: { type: "state", state, current, max, loss, lossRatio } }
   }]);
 }
 

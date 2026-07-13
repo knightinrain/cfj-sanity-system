@@ -66,15 +66,16 @@ function installSanityChatButton(attempt = 0) {
 function findSanityChatButtonMount() {
   const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat']");
   if (!chat) return null;
+  const diceTray = chat.querySelector("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']");
+  const diceBlock = diceTray?.closest?.("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']") ?? diceTray;
+  if (diceBlock?.parentElement) return { parent: diceBlock.parentElement, before: diceBlock.nextSibling };
   const form = chat.querySelector("#chat-form, form.chat-form, textarea[name='content']")?.closest?.("form") ?? chat.querySelector("textarea")?.closest?.("form");
-  if (form?.parentElement) return { parent: form.parentElement, before: form };
+  if (form?.parentElement) return { parent: form.parentElement, before: form.nextSibling };
   const textarea = chat.querySelector("textarea, [contenteditable='true']");
   const inputBlock = textarea?.closest?.("form, .chat-form, .chat-input, .message-input, .message-content, .editor") ?? textarea?.parentElement;
-  if (inputBlock?.parentElement) return { parent: inputBlock.parentElement, before: inputBlock };
-  const diceTray = chat.querySelector("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']");
-  if (diceTray?.parentElement) return { parent: diceTray.parentElement, before: diceTray };
+  if (inputBlock?.parentElement) return { parent: inputBlock.parentElement, before: inputBlock.nextSibling };
   const controls = chat.querySelector("#chat-controls, .chat-controls, footer, .sidebar-footer");
-  if (controls?.parentElement) return { parent: controls.parentElement, before: controls };
+  if (controls?.parentElement) return { parent: controls.parentElement, before: controls.nextSibling };
   return null;
 }
 
@@ -172,15 +173,7 @@ function exposeHouseRulesApi() {
     installFallbackButton: installSanityFallbackButton,
     requestSanity: requestDialogFromChat,
     setupSanity: setupActorDialog,
-    diagnose: () => ({
-      version: game.modules.get(MODULE_ID)?.version,
-      isGM: game.user?.isGM,
-      hasChatButton: Boolean(document.getElementById(CHAT_BUTTON_ID)),
-      chatButtonVisible: isElementVisible(document.getElementById(CHAT_BUTTON_ID)),
-      hasFallbackButton: Boolean(document.getElementById(CHAT_FALLBACK_BUTTON_ID)),
-      fallbackButtonVisible: isElementVisible(document.getElementById(CHAT_FALLBACK_BUTTON_ID)),
-      hasChat: Boolean(document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab=\'chat\'], [data-tab=\'chat\']"))
-    })
+    diagnose: diagnoseHouseRulesEntry
   };
 }
 
