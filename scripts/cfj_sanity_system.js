@@ -397,7 +397,8 @@ async function runSanityRoll(actor, type = "save") {
   await setSanity(actor, next, max);
   if (pending) await actor.unsetFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`);
   await refreshSanityState(actor, { previousState, messageWhisper });
-  const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source }) };
+  const rollSummary = renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source });
+  const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: rollSummary, content: rollSummary };
   if (messageWhisper?.length) messageData.whisper = messageWhisper;
   await roll.toMessage(messageData);
   if ((pending || game.user?.isGM) && setting("showGmDetail", true)) await renderGmDetail(actor, data, dc, total, failBy);

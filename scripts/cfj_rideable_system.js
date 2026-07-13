@@ -621,6 +621,61 @@ function addTokenHudButton(html, title, iconClass, onClick) {
   column.appendChild(button);
 }
 
+function addTokenHudMenu(html, tokenDoc) {
+  const root = globalThis.jQuery && html instanceof globalThis.jQuery ? html[0] : html;
+  if (!root?.querySelector) return;
+  const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
+  if (column.querySelector(".cfj-house-token-hud")) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "cfj-house-token-hud";
+
+  const main = document.createElement("div");
+  main.className = "control-icon cfj-house-token-hud-main";
+  main.title = "???????";
+  main.textContent = "??";
+
+  const menu = document.createElement("div");
+  menu.className = "cfj-house-token-hud-menu";
+  menu.hidden = true;
+
+  const addAction = (label, title, handler) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.title = title;
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      menu.hidden = true;
+      handler();
+    });
+    menu.appendChild(button);
+  };
+
+  addAction("?????", "?????? Token ???? Token?", () => mountSelectedOnHudToken(tokenDoc));
+  addAction("??", "??? Token ????????", () => dismountRider(tokenDoc));
+  addAction("????", "???? Token ???????", () => unmountAllRiders(tokenDoc));
+  if (moduleSetting("enableFollowing", false)) {
+    addAction("?????", "?????? Token ???? Token?", async () => {
+      const followers = controlledTokenDocs().filter(followerDoc => followerDoc.id !== tokenDoc.id);
+      if (!followers.length) return ui.notifications?.warn("???????? Token?????? Token ? HUD?");
+      for (const followerDoc of followers) await followToken(followerDoc, tokenDoc);
+      ui.notifications?.info(`${followers.length} ? Token ????? ${tokenDoc.name}?`);
+    });
+    addAction("????", "??? Token ???????", () => stopFollowing(tokenDoc));
+  }
+
+  main.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    menu.hidden = !menu.hidden;
+  });
+  wrapper.addEventListener("click", event => event.stopPropagation());
+  wrapper.append(main, menu);
+  column.appendChild(wrapper);
+}
+
 function registerSettings() {
   const register = (key, data) => game.settings.register(MODULE_ID, key, { scope: "world", config: true, ...data });
   register("enableRideableRules", { name: "【骑乘】启用骑乘房规", hint: "关闭后，骑乘 HUD、快捷键、跟随同步和 Rideable 兼容 API 都不会执行骑乘操作。", type: Boolean, default: true });
@@ -692,9 +747,7 @@ else Hooks.once("ready", activateRideLinkApi);
 Hooks.on("renderTokenHUD", (hud, html) => {
   const tokenDoc = hud.object?.document;
   if (!tokenDoc || !game.user?.isGM || !rideableEnabled()) return;
-  addTokenHudButton(html, "让选中的 Token 骑乘此 Token", "fas fa-horse", () => mountSelectedOnHudToken(tokenDoc));
-  addTokenHudButton(html, "让此 Token 下马", "fas fa-unlink", () => dismountRider(tokenDoc));
-  addTokenHudButton(html, "移除此 Token 上的全部骑手", "fas fa-users-slash", () => unmountAllRiders(tokenDoc));
+  addTokenHudMenu(html, tokenDoc);
 });
 
 Hooks.on("updateToken", async (tokenDoc, changes, options) => {
