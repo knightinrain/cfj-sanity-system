@@ -212,11 +212,13 @@ function showSanityResultDialog(payload) {
   if (game.user?.isGM || !payload?.actorId) return;
   const actor = game.actors.get(payload.actorId);
   if (!actor?.isOwner) return;
-  const label = payload.type === "check" ? "理智检定" : "理智豁免";
-  const outcome = payload.success ? "成功" : "失败";
-  const loss = payload.loss ? `当前理智降低 ${payload.loss} 点` : "当前理智没有降低";
-  const content = `<div class="cfj-sanity-popup"><h3>${label}结果：${outcome}</h3><table><tr><th>掷骰结果</th><td>${payload.total}</td></tr><tr><th>理智变化</th><td>${loss}</td></tr><tr><th>当前理智</th><td>${payload.current}/${payload.max} -> ${payload.next}/${payload.max}</td></tr><tr><th>理智状态</th><td>${escapeHtml(payload.previousStateLabel || "")} -> ${escapeHtml(payload.stateLabel || "")}</td></tr></table><p>角色卡上的理智状态、症状和效应已经按本次结果更新。</p></div>`;
-  new Dialog({ title: `${label}结果`, content, buttons: { ok: { label: "关闭" } } }).render(true);
+  const label = payload.type === "check" ? "\u7406\u667a\u68c0\u5b9a" : "\u7406\u667a\u8c41\u514d";
+  const outcome = payload.success ? "\u6210\u529f" : "\u5931\u8d25";
+  const loss = payload.loss ? `\u5f53\u524d\u7406\u667a\u964d\u4f4e ${payload.loss} \u70b9` : "\u5f53\u524d\u7406\u667a\u6ca1\u6709\u964d\u4f4e";
+  const beforePercent = sanityLossPercent(payload.current, payload.max);
+  const afterPercent = sanityLossPercent(payload.next, payload.max);
+  const content = `<div class="cfj-sanity-popup"><h3>${label}\u7ed3\u679c\uff1a${outcome}</h3><table><tr><th>\u63b7\u9ab0\u7ed3\u679c</th><td>${payload.total}</td></tr><tr><th>\u7406\u667a\u53d8\u5316</th><td>${loss}</td></tr><tr><th>\u5f53\u524d\u7406\u667a</th><td>${payload.current}/${payload.max} -> ${payload.next}/${payload.max}</td></tr><tr><th>\u5df2\u635f\u5931\u6bd4\u4f8b</th><td>${beforePercent}% -> ${afterPercent}%</td></tr><tr><th>\u7406\u667a\u72b6\u6001</th><td>${escapeHtml(payload.previousStateLabel || "")} -> ${escapeHtml(payload.stateLabel || "")}</td></tr></table><p>\u89d2\u8272\u5361\u4e0a\u7684\u7406\u667a\u72b6\u6001\u3001\u75c7\u72b6\u548c\u6548\u5e94\u5df2\u7ecf\u6309\u672c\u6b21\u7ed3\u679c\u66f4\u65b0\u3002</p></div>`;
+  new Dialog({ title: `${label}\u7ed3\u679c`, content, buttons: { ok: { label: "\u5173\u95ed" } } }).render(true);
 }
 
 function actorFromElement(element) {
@@ -293,6 +295,12 @@ function stateFor(current, max) {
   if (lossRatio >= 0.35) return "unbalanced";
   if (lossRatio >= 0.16) return "shaken";
   return "stable";
+}
+
+function sanityLossPercent(current, max) {
+  current = Math.max(0, Number(current || 0));
+  max = Math.max(1, Number(max || 1));
+  return Math.round(Math.max(0, Math.min(1, (max - current) / max)) * 100);
 }
 
 async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false, messageWhisper = null } = {}) {
@@ -415,8 +423,12 @@ async function runSanityRoll(actor, type = "save") {
   return { actor, type, total, success, loss, current, next, max, dc, failBy };
 }
 function renderRollChat(r) {
-  const label = r.type === "save" ? "理智豁免" : "理智检定";
-  return `<h3>${label}</h3><table><tr><th>${label}</th><td>${r.total}，${r.success ? "成功" : "失败"}</td></tr><tr><th>理智变化</th><td>${r.loss ? `-${r.loss}` : "不降低"}</td></tr><tr><th>当前理智</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>同源</th><td>${escapeHtml(r.source || "未命名来源")}</td></tr></table>`;
+  const label = r.type === "save" ? "\u7406\u667a\u8c41\u514d" : "\u7406\u667a\u68c0\u5b9a";
+  const beforePercent = sanityLossPercent(r.current, r.max);
+  const afterPercent = sanityLossPercent(r.next, r.max);
+  const beforeState = STATES[stateFor(r.current, r.max)]?.label || "";
+  const afterState = STATES[stateFor(r.next, r.max)]?.label || "";
+  return `<h3>${label}</h3><table><tr><th>${label}</th><td>${r.total}\uff0c${r.success ? "\u6210\u529f" : "\u5931\u8d25"}</td></tr><tr><th>\u7406\u667a\u53d8\u5316</th><td>${r.loss ? `-${r.loss}` : "\u4e0d\u964d\u4f4e"}</td></tr><tr><th>\u5f53\u524d\u7406\u667a</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>\u5df2\u635f\u5931\u6bd4\u4f8b</th><td>${beforePercent}% -> ${afterPercent}%</td></tr><tr><th>\u7406\u667a\u72b6\u6001</th><td>${escapeHtml(beforeState)} -> ${escapeHtml(afterState)}</td></tr><tr><th>\u540c\u6e90</th><td>${escapeHtml(r.source || "\u672a\u547d\u540d\u6765\u6e90")}</td></tr></table>`;
 }
 
 async function renderGmDetail(actor, data, dc, total, failBy = 0) {
