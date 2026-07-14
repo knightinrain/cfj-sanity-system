@@ -1,4 +1,4 @@
-.cfj-sanity-dialog fieldset {
+﻿.cfj-sanity-dialog fieldset {
   border: 1px solid var(--color-border-light-tertiary, #777);
   margin: 0.5rem 0 0;
   padding: 0.5rem;
@@ -72,11 +72,7 @@
 
 
 .cf-ride-link-hud-button {
-  color: #d7c48a;
-}
-
-.cf-ride-link-hud-button:hover {
-  color: #fff0b0;
+  display: none !important;
 }
 
 
@@ -172,3 +168,4 @@
   background: rgba(118, 82, 45, 0.98);
   color: #fff;
 }
+

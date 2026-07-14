@@ -605,25 +605,17 @@ async function handleIndependentRiderMovement(riderDoc, changes, options) {
   }
 }
 
-function addTokenHudButton(html, title, iconClass, onClick) {
-  const root = globalThis.jQuery && html instanceof globalThis.jQuery ? html[0] : html;
-  if (!root?.querySelector) return;
-  const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
-  const button = document.createElement("div");
-  button.className = "control-icon cf-ride-link-hud-button";
-  button.title = title;
-  button.innerHTML = `<i class="${iconClass}"></i>`;
-  button.addEventListener("click", event => {
-    event.preventDefault();
-    event.stopPropagation();
-    onClick();
-  });
-  column.appendChild(button);
+
+function removeLegacyRideableHudButtons(root) {
+  if (!root?.querySelectorAll) return;
+  root.querySelectorAll(".cf-ride-link-hud-button").forEach(button => button.remove());
 }
 
 function addTokenHudMenu(html, tokenDoc) {
   const root = globalThis.jQuery && html instanceof globalThis.jQuery ? html[0] : html;
   if (!root?.querySelector) return;
+  removeLegacyRideableHudButtons(root);
+  setTimeout(() => removeLegacyRideableHudButtons(root), 0);
   const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
   if (column.querySelector(".cfj-house-token-hud")) return;
 
@@ -805,6 +797,8 @@ window.addEventListener("keydown", event => {
     dismountSelected();
   }
 });
+
+
 
 
 
