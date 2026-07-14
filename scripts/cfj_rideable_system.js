@@ -1,4 +1,4 @@
-﻿const MODULE_ID = "cfj-sanity-system";
+const MODULE_ID = "cfj-sanity-system";
 const RIDEABLE_FEATURE = "rideable";
 const FLAG_RIDERS = "riders";
 const FLAG_MOUNT = "mount";
@@ -606,16 +606,9 @@ async function handleIndependentRiderMovement(riderDoc, changes, options) {
 }
 
 
-function removeLegacyRideableHudButtons(root) {
-  if (!root?.querySelectorAll) return;
-  root.querySelectorAll(".cf-ride-link-hud-button").forEach(button => button.remove());
-}
-
 function addTokenHudMenu(html, tokenDoc) {
   const root = globalThis.jQuery && html instanceof globalThis.jQuery ? html[0] : html;
   if (!root?.querySelector) return;
-  removeLegacyRideableHudButtons(root);
-  setTimeout(() => removeLegacyRideableHudButtons(root), 0);
   const column = root.querySelector(".col.right") ?? root.querySelector(".right") ?? root;
   if (column.querySelector(".cfj-house-token-hud")) return;
 

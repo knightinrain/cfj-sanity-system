@@ -176,7 +176,8 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 - 休息后的重新计算不会因为角色仍在裂解或崩溃而立刻再生成一个新症状。
 
 ## 版本记录
-- `0.3.8`：清理旧骑乘 HUD 外置按钮。房规模块会移除或隐藏 `.cf-ride-link-hud-button`，避免旧的骑乘、下马、移除骑手图标继续堆在 Token HUD 外面。
+- `0.3.9`：收回 0.3.8 对通用 `.cf-ride-link-hud-button` 的隐藏/删除处理。房规模块只管理自己的 `房规` HUD 入口，不再影响其他模块按钮。
+- `0.3.8`：曾尝试清理旧骑乘 HUD 外置按钮；该做法会影响通用 `.cf-ride-link-hud-button`，已由 `0.3.9` 撤回。
 - `0.3.7`：修复 module.json 被写入 UTF-8 BOM 导致 Foundry 安装器报 “Unexpected token” 的问题。
 - `0.3.6`：优化 Token HUD 状态菜单。若一个 Token 同时处于骑乘状态且身上已有骑手，会同时显示“下马”和“移除骑手”；普通未骑乘目标仍只显示“骑乘此目标”。
 - `0.3.5`：Token HUD 的“房规”二级菜单改为按当前 Token 状态显示动作。未骑乘时显示“骑乘此目标”；已骑乘时显示“下马”；作为坐骑且已有骑手时显示“移除骑手”。跟随功能同样按状态切换“跟随此目标”和“停止跟随”。
