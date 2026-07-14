@@ -1,10 +1,10 @@
-﻿{
+{
   "id": "cfj-sanity-system",
   "name": "cfj-sanity-system",
   "type": "module",
   "title": "苍梵界跑团房规",
   "description": "苍梵界 DND5e 跑团房规模块：理智、持续伤势、骑乘/下马/跟随 Token 工具。持续伤势可自动掷表、写入角色效应，并对已规则化伤势套用 DAE/Midi 可读取效果；GM 聊天卡会显示本次规则化结果；聊天区按钮会兼容常见骰子栏布局。",
-  "version": "0.3.4",
+  "version": "0.3.7",
   "url": "https://github.com/knightinrain/cfj-sanity-system",
   "manifest": "https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.json",
   "download": "https://github.com/knightinrain/cfj-sanity-system/archive/refs/heads/main.zip",
@@ -39,4 +39,6 @@
     "styles/cfj_sanity_system.css"
   ]
 }
+
+
 

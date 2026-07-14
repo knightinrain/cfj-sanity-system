@@ -653,17 +653,23 @@ function addTokenHudMenu(html, tokenDoc) {
     menu.appendChild(button);
   };
 
-  addAction("骑乘此目标", "让选中的 Token 骑乘此 Token。", () => mountSelectedOnHudToken(tokenDoc));
-  addAction("下马", "让此 Token 从当前坐骑上下来。", () => dismountRider(tokenDoc));
-  addAction("移除骑手", "移除此 Token 上的全部骑手。", () => unmountAllRiders(tokenDoc));
+  const isMounted = Boolean(getMountFlag(tokenDoc)?.mountId);
+  const hasRiders = getRiderIds(tokenDoc).length > 0;
+  if (isMounted) addAction("下马", "让此 Token 从当前坐骑上下来。", () => dismountRider(tokenDoc));
+  if (hasRiders) addAction("移除骑手", "移除此 Token 上的全部骑手。", () => unmountAllRiders(tokenDoc));
+  if (!isMounted && !hasRiders) addAction("骑乘此目标", "让选中的 Token 骑乘此 Token。", () => mountSelectedOnHudToken(tokenDoc));
   if (moduleSetting("enableFollowing", false)) {
-    addAction("跟随此目标", "让选中的 Token 跟随此 Token。", async () => {
-      const followers = controlledTokenDocs().filter(followerDoc => followerDoc.id !== tokenDoc.id);
-      if (!followers.length) return ui.notifications?.warn("请先选择要跟随的 Token，再打开目标 Token 的 HUD。");
-      for (const followerDoc of followers) await followToken(followerDoc, tokenDoc);
-      ui.notifications?.info(`${followers.length} 个 Token 已开始跟随 ${tokenDoc.name}。`);
-    });
-    addAction("停止跟随", "让此 Token 停止跟随目标。", () => stopFollowing(tokenDoc));
+    const isFollowing = Boolean(tokenDoc.getFlag(MODULE_ID, FLAG_FOLLOW)?.targetId);
+    if (isFollowing) {
+      addAction("停止跟随", "让此 Token 停止跟随目标。", () => stopFollowing(tokenDoc));
+    } else {
+      addAction("跟随此目标", "让选中的 Token 跟随此 Token。", async () => {
+        const followers = controlledTokenDocs().filter(followerDoc => followerDoc.id !== tokenDoc.id);
+        if (!followers.length) return ui.notifications?.warn("请先选择要跟随的 Token，再打开目标 Token 的 HUD。");
+        for (const followerDoc of followers) await followToken(followerDoc, tokenDoc);
+        ui.notifications?.info(`${followers.length} 个 Token 已开始跟随 ${tokenDoc.name}。`);
+      });
+    }
   }
 
   main.addEventListener("click", event => {
@@ -799,6 +805,8 @@ window.addEventListener("keydown", event => {
     dismountSelected();
   }
 });
+
+
 
 
 

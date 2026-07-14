@@ -176,11 +176,12 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 - 休息后的重新计算不会因为角色仍在裂解或崩溃而立刻再生成一个新症状。
 
 ## 版本记录
-- `0.3.4`：修复 Token HUD 折叠菜单新增中文在部分环境中显示为乱码的问题。
+- `0.3.7`：修复 module.json 被写入 UTF-8 BOM 导致 Foundry 安装器报 “Unexpected token” 的问题。
+- `0.3.6`：优化 Token HUD 状态菜单。若一个 Token 同时处于骑乘状态且身上已有骑手，会同时显示“下马”和“移除骑手”；普通未骑乘目标仍只显示“骑乘此目标”。
+- `0.3.5`：Token HUD 的“房规”二级菜单改为按当前 Token 状态显示动作。未骑乘时显示“骑乘此目标”；已骑乘时显示“下马”；作为坐骑且已有骑手时显示“移除骑手”。跟随功能同样按状态切换“跟随此目标”和“停止跟随”。
 - `0.3.3`：Token HUD 骑乘按钮折叠为一个“房规”主按钮，展开后显示中文操作菜单。
 
 
--  .3.4：修复 Token HUD 折叠菜单新增中文在部分环境中显示为乱码的问题。
 
 - `0.3.2`：封闭实测后修正理智掷骰聊天卡；结果表不再只放在 flavor，而是写入聊天消息主体，确保显示当前理智、已损失比例和理智状态。
 
@@ -215,6 +216,7 @@ https://raw.githubusercontent.com/knightinrain/cfj-sanity-system/main/module.jso
 - 进入裂解或崩溃时，角色获得可见状态和症状效应。
 - 短休移除裂解症状。
 - 长休恢复 1 点当前理智并移除理智症状。
+
 
 
 
