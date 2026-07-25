@@ -212,13 +212,18 @@ function showSanityResultDialog(payload) {
   if (game.user?.isGM || !payload?.actorId) return;
   const actor = game.actors.get(payload.actorId);
   if (!actor?.isOwner) return;
-  const label = payload.type === "check" ? "\u7406\u667a\u68c0\u5b9a" : "\u7406\u667a\u8c41\u514d";
-  const outcome = payload.success ? "\u6210\u529f" : "\u5931\u8d25";
-  const loss = payload.loss ? `\u5f53\u524d\u7406\u667a\u964d\u4f4e ${payload.loss} \u70b9` : "\u5f53\u524d\u7406\u667a\u6ca1\u6709\u964d\u4f4e";
+  const label = payload.type === "check" ? "理智检定" : "理智豁免";
+  const outcome = payload.success ? "成功" : "失败";
+  const loss = payload.loss ? `当前理智降低 ${payload.loss} 点。` : "当前理智没有降低。";
+  const beforeRemaining = sanityRemainingPercent(payload.current, payload.max);
+  const afterRemaining = sanityRemainingPercent(payload.next, payload.max);
   const beforePercent = sanityLossPercent(payload.current, payload.max);
   const afterPercent = sanityLossPercent(payload.next, payload.max);
-  const content = `<div class="cfj-sanity-popup"><h3>${label}\u7ed3\u679c\uff1a${outcome}</h3><table><tr><th>\u63b7\u9ab0\u7ed3\u679c</th><td>${payload.total}</td></tr><tr><th>\u7406\u667a\u53d8\u5316</th><td>${loss}</td></tr><tr><th>\u5f53\u524d\u7406\u667a</th><td>${payload.current}/${payload.max} -> ${payload.next}/${payload.max}</td></tr><tr><th>\u5df2\u635f\u5931\u6bd4\u4f8b</th><td>${beforePercent}% -> ${afterPercent}%</td></tr><tr><th>\u7406\u667a\u72b6\u6001</th><td>${escapeHtml(payload.previousStateLabel || "")} -> ${escapeHtml(payload.stateLabel || "")}</td></tr></table><p>\u89d2\u8272\u5361\u4e0a\u7684\u7406\u667a\u72b6\u6001\u3001\u75c7\u72b6\u548c\u6548\u5e94\u5df2\u7ecf\u6309\u672c\u6b21\u7ed3\u679c\u66f4\u65b0\u3002</p></div>`;
-  new Dialog({ title: `${label}\u7ed3\u679c`, content, buttons: { ok: { label: "\u5173\u95ed" } } }).render(true);
+  const symptom = payload.symptom
+    ? `<tr><th>症状</th><td>${escapeHtml(payload.symptom.name)}<br>${escapeHtml(payload.symptom.text)}<br><strong>持续：</strong>${escapeHtml(payload.symptom.duration)}</td></tr>`
+    : "<tr><th>症状</th><td>本次没有新增裂解或崩溃症状。</td></tr>";
+  const content = `<div class="cfj-sanity-popup"><h3>${label}结果：${outcome}</h3><p>${loss}</p><table><tr><th>掷骰结果</th><td>${payload.total}</td></tr><tr><th>当前理智</th><td>${payload.current}/${payload.max} -> ${payload.next}/${payload.max}</td></tr><tr><th>当前理智比例</th><td>${percentText(beforeRemaining)} -> ${percentText(afterRemaining)}</td></tr><tr><th>已损失比例</th><td>${percentText(beforePercent)} -> ${percentText(afterPercent)}</td></tr><tr><th>理智状态</th><td>${escapeHtml(payload.previousStateLabel || "")} -> ${escapeHtml(payload.stateLabel || "")}</td></tr>${symptom}</table><p>角色卡上的 SAN 数值、理智状态、症状和效应已经按本次结果更新。</p></div>`;
+  new Dialog({ title: `${label}结果`, content, buttons: { ok: { label: "关闭" } } }).render(true);
 }
 
 function actorFromElement(element) {
@@ -242,11 +247,9 @@ async function installActor(actor) {
   if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
-  const flags = getSanity(actor);
-  const visible = getVisibleSanity(actor);
-  const max = Number(flags.max || visible.max || actor.system?.abilities?.san?.value || 10);
-  const current = Number.isFinite(Number(flags.current)) ? Number(flags.current) : Number(visible.current || max);
-  await setSanity(actor, current, max);
+  const sanity = readSanity(actor, { fallbackDefault: true });
+  if (!sanity) return ui.notifications.warn(`${actor.name} 没有可用的理智数据。请使用“生成新理智值”。`);
+  await setSanity(actor, sanity.current, sanity.max);
   await refreshSanityState(actor, { forceState: true });
   ui.notifications.info(`${actor.name} 已连接理智系统。`);
 }
@@ -270,10 +273,48 @@ function getVisibleSanity(actor) {
   return { current: resource.value, max: resource.max };
 }
 
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function positiveNumber(value) {
+  const number = finiteNumber(value);
+  return number !== null && number > 0 ? number : null;
+}
+
+function readSanity(actor, { fallbackDefault = false } = {}) {
+  const flags = getSanity(actor);
+  const visible = getVisibleSanity(actor);
+  const abilityValue = actor.system?.abilities?.san?.value;
+
+  const flagMax = positiveNumber(flags.max);
+  const visibleMax = positiveNumber(visible.max);
+  const abilityMax = positiveNumber(abilityValue);
+  const max = flagMax ?? visibleMax ?? abilityMax ?? (fallbackDefault ? 10 : null);
+  if (!max) return null;
+
+  let current = null;
+  if (flagMax) current = finiteNumber(flags.current);
+  if (current === null && visibleMax) current = finiteNumber(visible.current);
+  if (current === null && abilityMax) current = abilityMax;
+  if (current === null) current = max;
+
+  const safeMax = Math.max(1, Math.round(max));
+  const safeCurrent = Math.max(0, Math.min(Math.round(current), safeMax));
+  return { current: safeCurrent, max: safeMax, flags, visible };
+}
+
 async function setSanity(actor, current, max) {
-  current = Math.max(0, Number(current || 0));
-  max = Math.max(1, Number(max || current || 1));
-  current = Math.min(current, max);
+  const parsedMax = positiveNumber(max);
+  const parsedCurrent = finiteNumber(current);
+  if (!actor || parsedMax === null || parsedCurrent === null) {
+    console.warn(`${MODULE_ID} | 拒绝写入无效理智值`, { actor: actor?.name, current, max });
+    return null;
+  }
+  max = Math.max(1, Math.round(parsedMax));
+  current = Math.max(0, Math.min(Math.round(parsedCurrent), max));
   const slot = setting("resourceSlot", "primary");
   const path = resourcePath(slot);
   const update = { "system.abilities.san.value": current };
@@ -284,38 +325,63 @@ async function setSanity(actor, current, max) {
   }
   await actor.update(update);
   await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...getSanity(actor), current, max, resourceSlot: slot });
+  return { current, max };
 }
 
 function stateFor(current, max) {
-  current = Math.max(0, Number(current || 0));
-  max = Math.max(1, Number(max || 1));
-  const lossRatio = Math.max(0, Math.min(1, (max - current) / max));
-  if (current <= 0 || lossRatio >= 0.8) return "collapsed";
-  if (lossRatio >= 0.55) return "fractured";
-  if (lossRatio >= 0.35) return "unbalanced";
-  if (lossRatio >= 0.16) return "shaken";
+  const ratio = sanityRemainingRatio(current, max);
+  if (ratio === null) return null;
+  if (ratio <= 0.2) return "collapsed";
+  if (ratio <= 0.45) return "fractured";
+  if (ratio <= 0.65) return "unbalanced";
+  if (ratio <= 0.84) return "shaken";
   return "stable";
 }
 
+function sanityRemainingRatio(current, max) {
+  const parsedMax = positiveNumber(max);
+  const parsedCurrent = finiteNumber(current);
+  if (parsedMax === null || parsedCurrent === null) return null;
+  const safeMax = Math.max(1, Math.round(parsedMax));
+  const safeCurrent = Math.max(0, Math.min(Math.round(parsedCurrent), safeMax));
+  return safeCurrent / safeMax;
+}
+
+function sanityRemainingPercent(current, max) {
+  const ratio = sanityRemainingRatio(current, max);
+  return ratio === null ? null : Math.round(ratio * 100);
+}
+
 function sanityLossPercent(current, max) {
-  current = Math.max(0, Number(current || 0));
-  max = Math.max(1, Number(max || 1));
-  return Math.round(Math.max(0, Math.min(1, (max - current) / max)) * 100);
+  const ratio = sanityRemainingRatio(current, max);
+  return ratio === null ? null : Math.round((1 - ratio) * 100);
+}
+
+function percentText(percent) {
+  return percent === null ? "未初始化" : `${percent}%`;
 }
 
 async function refreshSanityState(actor, { previousState = null, forceState = false, suppressSymptoms = false, messageWhisper = null } = {}) {
   if (!sanityEnabled()) return;
-  const flags = getSanity(actor);
-  const visible = getVisibleSanity(actor);
-  const current = Number(flags.current ?? visible.current ?? actor.system?.abilities?.san?.value ?? 0);
-  const max = Number(flags.max ?? visible.max ?? actor.system?.abilities?.san?.value ?? 1);
+  const sanity = readSanity(actor);
+  if (!sanity) {
+    console.warn(`${MODULE_ID} | 跳过理智状态刷新：没有合法理智最大值`, actor?.name);
+    return;
+  }
+  const { current, max, flags } = sanity;
   const state = stateFor(current, max);
+  if (!state) {
+    console.warn(`${MODULE_ID} | 跳过理智状态刷新：理智比例无法计算`, { actor: actor?.name, current, max });
+    return;
+  }
   const loss = Math.max(0, max - current);
-  const lossRatio = max > 0 ? loss / max : 0;
-  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, lossRatio, state, stateText: STATES[state].label });
+  const remainingRatio = sanityRemainingRatio(current, max);
+  const lossRatio = 1 - remainingRatio;
+  await actor.setFlag(FLAG_SCOPE, SAN_FLAG, { ...flags, current, max, loss, remainingRatio, lossRatio, state, stateText: STATES[state].label });
   await syncStateEffect(actor, state, current, max, loss, lossRatio);
   const shouldAddSymptom = setting("autoSymptoms", true) && !suppressSymptoms && (state === "fractured" || state === "collapsed") && (forceState || state !== previousState);
-  if (shouldAddSymptom) await addSymptom(actor, state, { messageWhisper });
+  const symptom = shouldAddSymptom ? await addSymptom(actor, state, { messageWhisper }) : null;
+  return { current, max, loss, remainingRatio, lossRatio, state, stateLabel: STATES[state].label, symptom };
 }
 
 async function syncStateEffect(actor, state, current, max, loss, lossRatio = max > 0 ? loss / max : 0) {
@@ -325,12 +391,12 @@ async function syncStateEffect(actor, state, current, max, loss, lossRatio = max
   if (state === "stable") return;
   const data = STATES[state];
   await actor.createEmbeddedDocuments("ActiveEffect", [{
-    name: `${data.label} | ${current}/${max} | \u635f\u5931${Math.round(lossRatio * 100)}% | ${data.rule}`,
+    name: `${data.label} | ${current}/${max} | 当前理智${Math.round((1 - lossRatio) * 100)}% | ${data.rule}`,
     icon: "icons/svg/terror.svg",
     origin: actor.uuid,
     disabled: false,
     statuses: [data.status],
-    description: `<p><strong>${data.label} (${current}/${max}\uff0c\u5df2\u635f\u5931 ${Math.round(lossRatio * 100)}%)</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
+    description: `<p><strong>${data.label} (${current}/${max}\uff0c当前理智 ${Math.round((1 - lossRatio) * 100)}%，已损失 ${Math.round(lossRatio * 100)}%)</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
     flags: { [MODULE_ID]: { type: "state", state, current, max, loss, lossRatio } }
   }]);
 }
@@ -345,7 +411,7 @@ async function addSymptom(actor, state, { messageWhisper = null } = {}) {
   const flagData = { type: "symptom", symptomKey: key, severity };
   if (existing) {
     await existing.update({ name: symptom.name, description: symptomDescription(symptom, severity), flags: { [MODULE_ID]: flagData } });
-    return;
+    return { key, label: SYMPTOMS[key].label, severity, name: symptom.name, text: symptom.text, duration: symptom.duration, reused: true };
   }
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     name: symptom.name,
@@ -359,6 +425,7 @@ async function addSymptom(actor, state, { messageWhisper = null } = {}) {
   const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: `<strong>${severity === "collapsed" ? "崩溃症状" : "裂解症状"}：${SYMPTOMS[key].label}</strong><br>${symptom.text}<br><strong>持续：</strong>${symptom.duration}` };
   if (messageWhisper?.length) messageData.whisper = messageWhisper;
   await roll.toMessage(messageData);
+  return { key, label: SYMPTOMS[key].label, severity, name: symptom.name, text: symptom.text, duration: symptom.duration, reused: false };
 }
 
 function symptomDescription(symptom, severity) {
@@ -377,9 +444,9 @@ async function runSanityRoll(actor, type = "save") {
   if (!data) return;
   const messageWhisper = pending ? sanityRecipients(actor) : null;
   const dc = Number(data.dc || setting("defaultDc", 15));
-  const visible = getVisibleSanity(actor);
-  const current = Number(flags.current ?? actor.system?.abilities?.san?.value ?? visible.current ?? 10);
-  const max = Number(flags.max ?? visible.max ?? current);
+  const sanity = readSanity(actor);
+  if (!sanity) return ui.notifications.warn(`${actor.name} 还没有合法理智值。请先由 GM 初始化或生成理智值。`);
+  const { current, max } = sanity;
   const mod = Math.floor((current - 10) / 2);
   const prof = data.proficient ? Number(actor.system?.attributes?.prof ?? 0) : 0;
   const roll = await new Roll(`1d20 + ${mod} + ${prof}`).evaluate({ async: true });
@@ -396,8 +463,11 @@ async function runSanityRoll(actor, type = "save") {
   const next = Math.max(0, current - loss);
   await setSanity(actor, next, max);
   if (pending) await actor.unsetFlag(FLAG_SCOPE, `${SAN_FLAG}.pending`);
-  await refreshSanityState(actor, { previousState, messageWhisper });
-  const rollSummary = renderRollChat({ type, dc, total, success, loss, current, next, max, source: data.source });
+  const refresh = await refreshSanityState(actor, { previousState, messageWhisper });
+  const nextState = refresh?.state ?? stateFor(next, max);
+  const symptom = refresh?.symptom ?? null;
+  if (!previousState || !nextState) return ui.notifications.warn(`${actor.name} 的理智比例无法计算，已停止结算。`);
+  const rollSummary = renderRollChat({ type, dc, total, die, mod, prof, success, failBy, loss, current, next, max, previousState, nextState, source: data.source, symptom });
   const messageData = { speaker: ChatMessage.getSpeaker({ actor }), flavor: rollSummary, content: rollSummary };
   if (messageWhisper?.length) messageData.whisper = messageWhisper;
   await roll.toMessage(messageData);
@@ -417,19 +487,24 @@ async function runSanityRoll(actor, type = "save") {
       max,
       previousState,
       previousStateLabel: STATES[previousState]?.label,
-      state: stateFor(next, max),
-      stateLabel: STATES[stateFor(next, max)]?.label
+      state: nextState,
+      stateLabel: STATES[nextState]?.label,
+      symptom
     });
   }
-  return { actor, type, total, success, loss, current, next, max, dc, failBy };
+  return { actor, type, total, die, mod, prof, success, loss, current, next, max, dc, failBy, previousState, state: nextState, symptom };
 }
 function renderRollChat(r) {
   const label = r.type === "save" ? "\u7406\u667a\u8c41\u514d" : "\u7406\u667a\u68c0\u5b9a";
+  const beforeRemaining = sanityRemainingPercent(r.current, r.max);
+  const afterRemaining = sanityRemainingPercent(r.next, r.max);
   const beforePercent = sanityLossPercent(r.current, r.max);
   const afterPercent = sanityLossPercent(r.next, r.max);
-  const beforeState = STATES[stateFor(r.current, r.max)]?.label || "";
-  const afterState = STATES[stateFor(r.next, r.max)]?.label || "";
-  return `<h3>${label}</h3><table><tr><th>${label}</th><td>${r.total}\uff0c${r.success ? "\u6210\u529f" : "\u5931\u8d25"}</td></tr><tr><th>\u7406\u667a\u53d8\u5316</th><td>${r.loss ? `-${r.loss}` : "\u4e0d\u964d\u4f4e"}</td></tr><tr><th>\u5f53\u524d\u7406\u667a</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>\u5df2\u635f\u5931\u6bd4\u4f8b</th><td>${beforePercent}% -> ${afterPercent}%</td></tr><tr><th>\u7406\u667a\u72b6\u6001</th><td>${escapeHtml(beforeState)} -> ${escapeHtml(afterState)}</td></tr><tr><th>\u540c\u6e90</th><td>${escapeHtml(r.source || "\u672a\u547d\u540d\u6765\u6e90")}</td></tr></table>`;
+  const beforeState = STATES[r.previousState ?? stateFor(r.current, r.max)]?.label || "";
+  const afterState = STATES[r.nextState ?? stateFor(r.next, r.max)]?.label || "";
+  const resultText = r.success ? "成功：当前理智不降低。" : `失败：当前理智降低 ${r.loss} 点。`;
+  const symptomText = r.symptom ? `${escapeHtml(r.symptom.name)}。${escapeHtml(r.symptom.text)} 持续：${escapeHtml(r.symptom.duration)}` : "本次没有新增裂解或崩溃症状。";
+  return `<div class="cfj-sanity-card"><h3>${label}结果：${r.success ? "成功" : "失败"}</h3><p>${resultText}</p><table><tr><th>掷骰</th><td>d20 ${r.die} + 理智调整值 ${r.mod >= 0 ? "+" : ""}${r.mod}${r.prof ? ` + 熟练 ${r.prof}` : ""} = ${r.total}</td></tr><tr><th>理智变化</th><td>${r.current}/${r.max} -> ${r.next}/${r.max}</td></tr><tr><th>当前理智比例</th><td>${percentText(beforeRemaining)} -> ${percentText(afterRemaining)}</td></tr><tr><th>已损失比例</th><td>${percentText(beforePercent)} -> ${percentText(afterPercent)}</td></tr><tr><th>理智状态</th><td>${escapeHtml(beforeState)} -> ${escapeHtml(afterState)}</td></tr><tr><th>症状</th><td>${symptomText}</td></tr><tr><th>同源</th><td>${escapeHtml(r.source || "未命名来源")}</td></tr></table></div>`;
 }
 
 async function renderGmDetail(actor, data, dc, total, failBy = 0) {
@@ -520,10 +595,9 @@ async function restLong(actor) {
   if (!sanityEnabled()) return;
   actor = resolveActor(actor);
   if (!actor) return;
-  const flags = getSanity(actor);
-  const visible = getVisibleSanity(actor);
-  const max = Number(flags.max ?? visible.max ?? 1);
-  const current = Number(flags.current ?? visible.current ?? 0);
+  const sanity = readSanity(actor);
+  if (!sanity) return;
+  const { current, max } = sanity;
   await setSanity(actor, Math.min(max, current + 1), max);
   const remove = actor.effects.filter((e) => e.getFlag(MODULE_ID, "type") === "symptom");
   if (remove.length) await actor.deleteEmbeddedDocuments("ActiveEffect", remove.map((e) => e.id));
