@@ -64,7 +64,10 @@ function installSanityChatButton(attempt = 0) {
 }
 
 function findSanityChatButtonMount() {
-  const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat']");
+  const explicitDice = findVisibleDiceTray();
+  if (explicitDice?.parentElement) return { parent: explicitDice.parentElement, before: explicitDice.nextSibling };
+
+  const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat'], #ui-right");
   if (!chat) return null;
   const diceTray = chat.querySelector("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']");
   const diceBlock = diceTray?.closest?.("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']") ?? diceTray;
@@ -77,6 +80,29 @@ function findSanityChatButtonMount() {
   const controls = chat.querySelector("#chat-controls, .chat-controls, footer, .sidebar-footer");
   if (controls?.parentElement) return { parent: controls.parentElement, before: controls.nextSibling };
   return null;
+}
+
+function findVisibleDiceTray() {
+  const root = document.querySelector("#ui-right, #sidebar, aside#sidebar, body");
+  const candidates = Array.from(root?.querySelectorAll?.("div, section, footer, form") ?? []);
+  return candidates
+    .filter((element) => isElementVisible(element))
+    .filter((element) => {
+      const text = compactText(element);
+      if (!text.includes("D2") && !text.includes("D3") && !text.includes("掷骰")) return false;
+      if (element.querySelector(`#${CHAT_BUTTON_ID}, #${CHAT_FALLBACK_BUTTON_ID}`)) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width >= 120 && rect.width <= 420 && rect.height >= 35 && rect.height <= 220;
+    })
+    .sort((a, b) => {
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      return (ar.height - br.height) || (br.top - ar.top);
+    })[0] ?? null;
+}
+
+function compactText(element) {
+  return String(element?.innerText ?? element?.textContent ?? "").replace(/\s+/g, "");
 }
 
 function ensureSanityEntryVisible() {
@@ -330,7 +356,3 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((char) => map[char] ?? char).join("");
 }
-
-
-
-
