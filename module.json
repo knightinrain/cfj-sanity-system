@@ -32,6 +32,7 @@
   "esmodules": [
     "scripts/cfj_sanity_system.js",
     "scripts/cfj_sanity_chat_panel.js",
+    "scripts/cfj_sanity_bonus_guard.js",
     "scripts/cfj_injury_system.js",
     "scripts/cfj_rideable_system.js"
   ],
