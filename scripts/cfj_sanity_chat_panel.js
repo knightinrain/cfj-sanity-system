@@ -1,13 +1,9 @@
 const MODULE_ID = "cfj-sanity-system";
-const FLAG_SCOPE = "world";
-const SAN_FLAG = "sanity";
 const CHAT_BUTTON_ID = "cfj-sanity-chat-entry";
 const CHAT_FALLBACK_BUTTON_ID = "cfj-sanity-floating-entry";
-const CHAT_COMMANDS = ["/\u7406\u667a", "/\u7406\u667a\u7cfb\u7edf", "/san", "/sanity"];
+const CHAT_COMMANDS = ["/理智", "/理智系统", "/san", "/sanity"];
 
-Hooks.once("init", () => {
-  Hooks.on("getSceneControlButtons", removeExternalSanityTool);
-});
+Hooks.once("init", () => Hooks.on("getSceneControlButtons", removeExternalSanityTool));
 
 Hooks.once("ready", () => {
   Hooks.on("getSceneControlButtons", removeExternalSanityTool);
@@ -15,11 +11,9 @@ Hooks.once("ready", () => {
   installSanityChatDomCommand();
   installSanityChatActions();
   installSanityChatButton();
-  window.setTimeout(() => {
-    ensureSanityEntryVisible();
-  }, 4500);
-  exposeHouseRulesApi();
-  console.log(`${MODULE_ID} | chat panel ready`);
+  window.setTimeout(ensureSanityEntryVisible, 4500);
+  exposeSanityUiApi();
+  console.log(`${MODULE_ID} | sanity panel ready`);
 });
 
 Hooks.on("renderSidebarTab", () => installSanityChatButton());
@@ -49,7 +43,7 @@ function installSanityChatButton(attempt = 0) {
     if (!mount) {
       if (attempt < 20) installSanityChatButton(attempt + 1);
       else {
-        console.warn(`${MODULE_ID} | \u627e\u4e0d\u5230\u804a\u5929\u6846\u6309\u94ae\u6302\u8f7d\u70b9\uff0c\u6539\u7528 GM \u5907\u7528\u5165\u53e3\u3002\u4e5f\u53ef\u4ee5\u5728\u804a\u5929\u6846\u8f93\u5165 /\u7406\u667a \u6253\u5f00\u63a7\u5236\u53f0\u3002`);
+        console.warn(`${MODULE_ID} | 找不到聊天区理智按钮挂载点，改用 GM 备用入口。也可以在聊天框输入 /理智 打开控制台。`);
         installSanityFallbackButton();
       }
       return;
@@ -57,7 +51,7 @@ function installSanityChatButton(attempt = 0) {
     const row = document.createElement("div");
     row.id = CHAT_BUTTON_ID;
     row.className = "cfj-sanity-chat-entry";
-    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="\u6253\u5f00\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0"><i class="fas fa-dice-d20"></i> \u8dd1\u56e2\u623f\u89c4</button>`;
+    row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="打开苍梵界理智系统控制台"><i class="fas fa-brain"></i> 理智系统</button>`;
     mount.parent.insertBefore(row, mount.before ?? null);
     window.setTimeout(ensureSanityEntryVisible, 250);
   }, 100 + attempt * 150);
@@ -66,7 +60,6 @@ function installSanityChatButton(attempt = 0) {
 function findSanityChatButtonMount() {
   const explicitDice = findVisibleDiceTray();
   if (explicitDice?.parentElement) return { parent: explicitDice.parentElement, before: explicitDice.nextSibling };
-
   const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat'], #ui-right");
   if (!chat) return null;
   const diceTray = chat.querySelector("#dice-tray, .dice-tray, .dice-calculator, [class*='dice-tray'], [class*='diceTray']");
@@ -85,20 +78,17 @@ function findSanityChatButtonMount() {
 function findVisibleDiceTray() {
   const root = document.querySelector("#ui-right, #sidebar, aside#sidebar, body");
   const candidates = Array.from(root?.querySelectorAll?.("div, section, footer, form") ?? []);
-  return candidates
-    .filter((element) => isElementVisible(element))
-    .filter((element) => {
-      const text = compactText(element);
-      if (!text.includes("D2") && !text.includes("D3") && !text.includes("掷骰")) return false;
-      if (element.querySelector(`#${CHAT_BUTTON_ID}, #${CHAT_FALLBACK_BUTTON_ID}`)) return false;
-      const rect = element.getBoundingClientRect();
-      return rect.width >= 120 && rect.width <= 420 && rect.height >= 35 && rect.height <= 220;
-    })
-    .sort((a, b) => {
-      const ar = a.getBoundingClientRect();
-      const br = b.getBoundingClientRect();
-      return (ar.height - br.height) || (br.top - ar.top);
-    })[0] ?? null;
+  return candidates.filter(isElementVisible).filter((element) => {
+    const text = compactText(element);
+    if (!text.includes("D2") && !text.includes("D3") && !text.includes("掷骰")) return false;
+    if (element.querySelector(`#${CHAT_BUTTON_ID}, #${CHAT_FALLBACK_BUTTON_ID}`)) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width >= 120 && rect.width <= 420 && rect.height >= 35 && rect.height <= 220;
+  }).sort((a, b) => {
+    const ar = a.getBoundingClientRect();
+    const br = b.getBoundingClientRect();
+    return (ar.height - br.height) || (br.top - ar.top);
+  })[0] ?? null;
 }
 
 function compactText(element) {
@@ -159,12 +149,15 @@ function installSanityChatDomCommand() {
 
 function installSanityFallbackButton() {
   if (!game.user?.isGM || document.getElementById(CHAT_FALLBACK_BUTTON_ID)) return;
-  const host = document.body;
   const row = document.createElement("div");
   row.id = CHAT_FALLBACK_BUTTON_ID;
   row.className = "cfj-sanity-floating-entry";
-  row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="\u6253\u5f00\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0"><i class="fas fa-dice-d20"></i> \u8dd1\u56e2\u623f\u89c4</button>`;
-  host.appendChild(row);
+  row.innerHTML = `<button type="button" data-cfj-sanity-action="panel" title="打开苍梵界理智系统控制台"><i class="fas fa-brain"></i> 理智系统</button>`;
+  document.body.appendChild(row);
+}
+
+function removeSanityFallbackButton() {
+  document.getElementById(CHAT_FALLBACK_BUTTON_ID)?.remove();
 }
 
 function isSanityChatCommand(value) {
@@ -186,24 +179,23 @@ function clearInputValue(input) {
 }
 
 function openPanelFromCommand() {
-  if (!game.user?.isGM) ui.notifications.warn("\u82cd\u68b5\u754c\u8dd1\u56e2\u623f\u89c4\u63a7\u5236\u53f0\u53ea\u6709 GM \u53ef\u4ee5\u6253\u5f00\u3002\u7b49\u5f85 GM \u53d1\u8d77\u7406\u667a\u5224\u5b9a\u540e\uff0c\u73a9\u5bb6\u4f1a\u6536\u5230\u4e13\u7528\u5224\u5b9a\u5f39\u7a97\u548c\u5224\u5b9a\u5361\u3002");
+  if (!game.user?.isGM) ui.notifications.warn("苍梵界理智系统控制台只有 GM 可以打开。等待 GM 发起理智判定后，玩家会收到专用判定弹窗和判定卡。");
   else renderSanityPanel();
   return false;
 }
 
-function exposeHouseRulesApi() {
-  game.cfjHouseRules = {
-    ...(game.cfjHouseRules ?? {}),
+function exposeSanityUiApi() {
+  game.cfjSanityUi = {
     openPanel: renderSanityPanel,
     installButton: installSanityChatButton,
     installFallbackButton: installSanityFallbackButton,
     requestSanity: requestDialogFromChat,
     setupSanity: setupActorDialog,
-    diagnose: diagnoseHouseRulesEntry
+    diagnose: diagnoseSanityEntry
   };
 }
 
-function diagnoseHouseRulesEntry() {
+function diagnoseSanityEntry() {
   const chatButton = document.getElementById(CHAT_BUTTON_ID);
   const fallbackButton = document.getElementById(CHAT_FALLBACK_BUTTON_ID);
   const chat = document.querySelector("#chat, #sidebar #chat, aside#sidebar [data-tab='chat'], [data-tab='chat']");
@@ -242,9 +234,9 @@ function installSanityChatActions() {
 }
 
 async function renderSanityPanel() {
-  if (!game.user?.isGM) return ui.notifications.warn("苍梵界跑团房规控制台只有 GM 可以打开。");
+  if (!game.user?.isGM) return ui.notifications.warn("苍梵界理智系统控制台只有 GM 可以打开。");
   await ChatMessage.create({
-    speaker: { alias: "苍梵界跑团房规" },
+    speaker: { alias: "苍梵界理智系统" },
     whisper: ChatMessage.getWhisperRecipients("GM"),
     content: gmPanelContent()
   });
@@ -255,15 +247,13 @@ function panelSetting(key, fallback) {
 }
 
 function gmPanelContent() {
-  const sanity = panelSetting("enableSanityRules", true);
-  const injury = panelSetting("enableInjuryRules", false);
-  const rideable = panelSetting("enableRideableRules", true);
-  const status = (enabled) => enabled ? "已启用" : "已关闭";
-  return `<div class="cfj-sanity-card"><h3>苍梵界跑团房规控制台</h3><p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p>
-  <section class="cfj-house-rule-section"><h4>理智 <span>${status(sanity)}</span></h4><div class="cfj-sanity-actions">${sanity ? `<button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">初始化或刷新选中角色</button>` : `<button type="button" disabled>理智规则已关闭</button>`}</div></section>
-  <section class="cfj-house-rule-section"><h4>持续伤势 <span>${status(injury)}</span></h4><div class="cfj-sanity-actions"><button type="button" data-cfj-injury-action="rules">持续伤势规则</button>${injury ? `<button type="button" data-cfj-injury-action="roll">投掷持续伤势</button>` : `<button type="button" disabled>持续伤势已关闭</button>`}</div></section>
-  <section class="cfj-house-rule-section"><h4>骑乘 <span>${status(rideable)}</span></h4><p class="cfj-sanity-note">骑乘使用 Token HUD 和快捷键：M 骑乘，N 下马。${rideable ? "当前可用。" : "当前已关闭，不显示骑乘 HUD 按钮，也不执行快捷键。"}</p></section>
-  <p class="cfj-sanity-note">每个功能都可在模块设置中单独启用或关闭，设置项按【理智】、【持续伤势】、【骑乘】分区排列。</p></div>`;
+  const enabled = panelSetting("enableSanityRules", true);
+  return `<div class="cfj-sanity-card"><h3>苍梵界理智系统</h3>
+  <p>这张控制台只对 GM 可见。玩家不会看到 DC、同源、熟练、主动深入或目标选择过程。</p>
+  <p><strong>建卡提醒：</strong>角色卡属性中需要有 <code>SAN</code> / 理智属性，Tidy 角色卡会显示理智值和理智调整值。若角色还没有合法理智值，请先选中角色 token，然后点击“生成或连接理智值”。</p>
+  <section class="cfj-sanity-section"><h4>理智 <span>${enabled ? "已启用" : "已关闭"}</span></h4>
+  <div class="cfj-sanity-actions">${enabled ? `<button type="button" data-cfj-sanity-action="request">发起理智判定</button><button type="button" data-cfj-sanity-action="setup">生成或连接理智值</button>` : `<button type="button" disabled>理智规则已关闭</button>`}</div></section>
+  <p class="cfj-sanity-note">玩家只需要点击角色卡上的 SAN 检定或 SAN 豁免；DC、同源和风险由 GM 发起时保存。</p></div>`;
 }
 
 function selectedActors() {
@@ -280,8 +270,11 @@ function setupActorDialog() {
   if (!actors.length) return ui.notifications.warn("请先选择角色 token，或给当前用户指定角色。");
   const names = actors.map((actor) => escapeHtml(actor.name)).join("、");
   new Dialog({
-    title: "初始化或刷新理智",
-    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p><p><strong>生成新理智值</strong>会按 4d6 去最低重置最大理智和当前理智。<br><strong>只连接/刷新</strong>不会重掷，只同步当前卡面的理智数据和状态。</p></form>`,
+    title: "生成或连接理智值",
+    content: `<form class="cfj-sanity-dialog"><p>目标角色：${names}</p>
+    <p><strong>生成新理智值</strong>：按 4d6 去最低，写入最大理智、当前理智和角色卡 SAN 属性。</p>
+    <p><strong>只连接/刷新</strong>：不重掷，只读取现有 SAN/资源栏/理智旗标并刷新状态。若没有合法最大理智，不会写入 0。</p>
+    <p class="notes">建议在 Tidy 角色卡属性区添加 <strong>SAN / 理智</strong>，这样卡面会显示理智值、理智调整值，并能直接点击 SAN 检定或 SAN 豁免。</p></form>`,
     buttons: {
       generate: { label: "生成新理智值", callback: async () => { for (const actor of actors) await game.cfjSanity.generateSanity(actor); } },
       install: { label: "只连接/刷新", callback: async () => { for (const actor of actors) await game.cfjSanity.installActor(actor); } },
@@ -319,19 +312,6 @@ function requestTargetRows() {
 async function requestForActorsFromChat(actors, data) {
   if (!game.user?.isGM) return;
   await game.cfjSanity?.requestForActors?.(actors, data);
-}
-
-function whisperRecipientsForActor(actor) {
-  const recipients = new Set();
-  for (const user of game.users ?? []) {
-    if (user.isGM || actor.testUserPermission?.(user, "OWNER")) recipients.add(user.id);
-  }
-  return [...recipients];
-}
-
-function requestCardContent(actor, data) {
-  const label = data.type === "save" ? "理智豁免" : "理智检定";
-  return `<div class="cfj-sanity-card cfj-sanity-request"><h3>${label}</h3><p>GM 已对 ${escapeHtml(actor.name)} 发起 ${label}。玩家不需要设置 DC；DC、同源和风险由 GM 保存到本次请求中。</p><div class="cfj-sanity-actions"><button type="button" data-cfj-sanity-action="roll" data-actor-id="${actor.id}" data-roll-type="${data.type}">进行${label}</button></div><p class="cfj-sanity-note">也可以点击角色卡上的 SAN ${data.type === "save" ? "豁免" : "检定"}。两种方式使用同一组 GM 参数。</p></div>`;
 }
 
 async function rollRequestedSanity(actorId, type) {
