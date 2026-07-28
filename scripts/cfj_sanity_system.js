@@ -157,7 +157,6 @@ function installSheetBridge() {
   }, true);
 }
 
-
 function registerSanitySocket() {
   game.socket?.on?.(`module.${MODULE_ID}`, (message) => {
     if (!message?.userIds?.includes?.(game.user.id)) return;
@@ -232,14 +231,15 @@ function actorFromElement(element) {
   return id ? game.actors.get(id) : null;
 }
 
-
 async function generateSanity(actor) {
   if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
+  const hadSanAbility = hasSanAbility(actor);
   const roll = await new Roll("4d6kh3").evaluate({ async: true });
   await setSanity(actor, roll.total, roll.total);
   await refreshSanityState(actor, { forceState: true });
+  remindSanAbility(actor, hadSanAbility);
   await roll.toMessage({ speaker: ChatMessage.getSpeaker({ actor }), whisper: sanityRecipients(actor), flavor: `<strong>生成理智值</strong><br>${escapeHtml(actor.name)} 的最大理智值为 ${roll.total}。` });
 }
 
@@ -247,10 +247,12 @@ async function installActor(actor) {
   if (!sanityEnabled()) return ui.notifications.warn("理智规则当前已关闭。");
   actor = resolveActor(actor);
   if (!actor) return ui.notifications.warn("请先选择或打开一个角色。");
+  const hadSanAbility = hasSanAbility(actor);
   const sanity = readSanity(actor, { fallbackDefault: true });
   if (!sanity) return ui.notifications.warn(`${actor.name} 没有可用的理智数据。请使用“生成新理智值”。`);
   await setSanity(actor, sanity.current, sanity.max);
   await refreshSanityState(actor, { forceState: true });
+  remindSanAbility(actor, hadSanAbility);
   ui.notifications.info(`${actor.name} 已连接理智系统。`);
 }
 
@@ -258,6 +260,15 @@ function resolveActor(actor) {
   if (actor?.documentName === "Actor") return actor;
   if (typeof actor === "string") return game.actors.get(actor);
   return canvas?.tokens?.controlled?.[0]?.actor ?? game.user?.character ?? null;
+}
+
+function hasSanAbility(actor) {
+  return Boolean(actor?.system?.abilities?.san);
+}
+
+function remindSanAbility(actor, hadSanAbility) {
+  if (hadSanAbility) return;
+  ui.notifications.warn(`${actor.name} 已写入理智数据；如果角色卡属性栏仍未显示 SAN / 理智，请在 Tidy 角色卡的属性设置中添加 SAN。`);
 }
 
 function getSanity(actor) { return foundry.utils.deepClone(actor.getFlag(FLAG_SCOPE, SAN_FLAG) ?? {}); }
@@ -317,7 +328,11 @@ async function setSanity(actor, current, max) {
   current = Math.max(0, Math.min(Math.round(parsedCurrent), max));
   const slot = setting("resourceSlot", "primary");
   const path = resourcePath(slot);
-  const update = { "system.abilities.san.value": current };
+  const update = {
+    "system.abilities.san.value": current,
+    "system.abilities.san.bonuses.check": "0",
+    "system.abilities.san.bonuses.save": "0"
+  };
   if (path) {
     update[`${path}.value`] = current;
     update[`${path}.max`] = max;
@@ -396,7 +411,7 @@ async function syncStateEffect(actor, state, current, max, loss, lossRatio = max
     origin: actor.uuid,
     disabled: false,
     statuses: [data.status],
-    description: `<p><strong>${data.label} (${current}/${max}\uff0c当前理智 ${Math.round((1 - lossRatio) * 100)}%，已损失 ${Math.round(lossRatio * 100)}%)</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
+    description: `<p><strong>${data.label} (${current}/${max}，当前理智 ${Math.round((1 - lossRatio) * 100)}%，已损失 ${Math.round(lossRatio * 100)}%)</strong></p><p>${data.summary}</p><p>${data.rule}</p>`,
     flags: { [MODULE_ID]: { type: "state", state, current, max, loss, lossRatio } }
   }]);
 }
@@ -494,8 +509,9 @@ async function runSanityRoll(actor, type = "save") {
   }
   return { actor, type, total, die, mod, prof, success, loss, current, next, max, dc, failBy, previousState, state: nextState, symptom };
 }
+
 function renderRollChat(r) {
-  const label = r.type === "save" ? "\u7406\u667a\u8c41\u514d" : "\u7406\u667a\u68c0\u5b9a";
+  const label = r.type === "save" ? "理智豁免" : "理智检定";
   const beforeRemaining = sanityRemainingPercent(r.current, r.max);
   const afterRemaining = sanityRemainingPercent(r.next, r.max);
   const beforePercent = sanityLossPercent(r.current, r.max);
@@ -569,6 +585,7 @@ async function requestForActors(actors, data) {
   }
   if (skipped.length) ui.notifications.warn(`这些角色没有在线玩家拥有者，已取消理智判定：${skipped.join("、")}`);
 }
+
 function sanityRecipients(actor) {
   const recipients = new Set();
   for (const user of game.users ?? []) {
@@ -613,10 +630,3 @@ function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return Array.from(String(value ?? "")).map((c) => map[c] ?? c).join("");
 }
-
-
-
-
-
-
-
